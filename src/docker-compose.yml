@@ -1,0 +1,19 @@
+version: '3.8'
+services:
+  client:
+    build: ./client
+    volumes:
+      - ./client/app:/app
+      - ./volumes/client-data:/data
+    ports:
+      - "5000:5000"
+    depends_on:
+      - identity-manager
+
+  identity-manager:
+    build: ./identity-manager
+    volumes:
+      - ./identity-manager/app:/app
+      - ./volumes/identity-data:/data
+    ports:
+      - "8000:8000"
