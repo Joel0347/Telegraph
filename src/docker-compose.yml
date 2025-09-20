@@ -1,7 +1,6 @@
-version: '3.8'
 services:
   client:
-    build: ./client
+    image: src-client:latest
     volumes:
       - ./client/app:/app
       - ./volumes/client-data:/data
@@ -11,7 +10,7 @@ services:
       - identity-manager
 
   identity-manager:
-    build: ./identity-manager
+    image: src-identity-manager:latest
     volumes:
       - ./identity-manager/app:/app
       - ./volumes/identity-data:/data

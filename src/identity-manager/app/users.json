@@ -1,1 +1,12 @@
-{"joel": {"password": "a6761ccff1191f3ee53acada4f7965241538511ef6eb52d37974507ab5a9023e", "messages": []}}
+[
+  {
+    "username": "claudia",
+    "password": "35f85825b9016fcc7818aca22298dc88a92ba6e4f029366ff8acbb3f823152d4",
+    "messages": []
+  },
+  {
+    "username": "joel",
+    "password": "a6761ccff1191f3ee53acada4f7965241538511ef6eb52d37974507ab5a9023e",
+    "messages": []
+  }
+]

@@ -5,8 +5,12 @@ def send_message(sender, receiver, text):
     return f"Mensaje enviado de {sender} a {receiver}"
 
 def get_chat(sender, receiver):
-    messages = load_messages()
-    chat_id = f"{sender}_{receiver}"
-    reverse_id = f"{receiver}_{sender}"
-    chat = messages.get(chat_id, []) + messages.get(reverse_id, [])
-    return sorted(chat, key=lambda m: m.get("timestamp", 0))  # si agregas timestamps
+    messages = load_messages(sender)
+    chat_msgs = []
+    # Tomar todos los mensajes entre sender y receiver
+    for msg in messages.get(receiver, []):
+        if (msg["from"] == sender and msg["to"] == receiver) or (msg["from"] == receiver and msg["to"] == sender):
+            chat_msgs.append(msg)
+    # Ordenar por timestamp
+    chat_msgs.sort(key=lambda m: m.get("timestamp", ""))
+    return chat_msgs
