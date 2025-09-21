@@ -22,6 +22,7 @@ def mark_messages_as_read(user, from_user):
         except json.JSONDecodeError:
             chats = {}
     changed = False
+    # Marcar como leídos en el archivo del usuario que lee
     if from_user in chats:
         for msg in chats[from_user]:
             if msg["from"] == from_user and msg["to"] == user and not msg.get("leido", False):
@@ -30,6 +31,24 @@ def mark_messages_as_read(user, from_user):
     if changed:
         with open(storage_path, "w") as f:
             json.dump(chats, f, indent=2)
+
+    # También marcar como leídos en el archivo del remitente
+    sender_path = get_storage_path(from_user)
+    if os.path.exists(sender_path):
+        with open(sender_path, "r") as f:
+            try:
+                sender_chats = json.load(f)
+            except json.JSONDecodeError:
+                sender_chats = {}
+        sender_changed = False
+        if user in sender_chats:
+            for msg in sender_chats[user]:
+                if msg["from"] == from_user and msg["to"] == user and not msg.get("leido", False):
+                    msg["leido"] = True
+                    sender_changed = True
+        if sender_changed:
+            with open(sender_path, "w") as f:
+                json.dump(sender_chats, f, indent=2)
 
 def load_messages(user):
     """
