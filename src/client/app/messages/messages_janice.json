@@ -1,0 +1,32 @@
+{
+  "claudia": [
+    {
+      "from": "janice",
+      "to": "claudia",
+      "text": "hola claudia!!!",
+      "timestamp": "2025-09-21T03:58:15.286749",
+      "leido": false
+    },
+    {
+      "from": "janice",
+      "to": "claudia",
+      "text": "hace rato no te veo",
+      "timestamp": "2025-09-21T03:58:24.743177",
+      "leido": false
+    },
+    {
+      "from": "claudia",
+      "to": "janice",
+      "text": "jeje",
+      "timestamp": "2025-09-21T03:58:46.967401",
+      "leido": false
+    },
+    {
+      "from": "claudia",
+      "to": "janice",
+      "text": "q bien",
+      "timestamp": "2025-09-21T03:58:50.167684",
+      "leido": false
+    }
+  ]
+}
