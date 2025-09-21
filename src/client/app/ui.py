@@ -61,8 +61,9 @@ def show_chat():
 
     # Área principal tipo Telegram
     if st.session_state.selected_chat:
-        # Marcar como leídos los mensajes recibidos
+        # Marcar como leídos los mensajes recibidos y recargar mensajes
         mark_messages_as_read(username, st.session_state.selected_chat)
+        user_chats = load_messages(username)
 
         st.markdown(f"<h2 style='text-align:center;'>{st.session_state.selected_chat}</h2>", unsafe_allow_html=True)
         st.markdown("<hr>", unsafe_allow_html=True)
@@ -104,9 +105,23 @@ def show_chat():
         if all_users:
             new_receiver = st.selectbox("Selecciona usuario para chatear", all_users, key="new_chat_select")
             if st.button("Iniciar chat", key="start_chat_btn"):
-                st.session_state.selected_chat = new_receiver
+                # Si el chat no existe, crear la entrada vacía en el archivo de mensajes
                 if new_receiver not in user_chats:
-                    user_chats[new_receiver] = []
+                    from storage import get_storage_path
+                    import os, json
+                    storage_path = get_storage_path(username)
+                    if not os.path.exists(storage_path):
+                        chats = {}
+                    else:
+                        with open(storage_path, "r") as f:
+                            try:
+                                chats = json.load(f)
+                            except json.JSONDecodeError:
+                                chats = {}
+                    chats[new_receiver] = []
+                    with open(storage_path, "w") as f:
+                        json.dump(chats, f, indent=2)
+                st.session_state.selected_chat = new_receiver
                 st.rerun()
         else:
             st.info("No hay otros usuarios disponibles para chatear.")
