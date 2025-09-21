@@ -110,6 +110,8 @@ def show_chat():
                     from storage import get_storage_path
                     import os, json
                     storage_path = get_storage_path(username)
+                    # Crear directorio si no existe
+                    os.makedirs(os.path.dirname(storage_path), exist_ok=True)
                     if not os.path.exists(storage_path):
                         chats = {}
                     else:
