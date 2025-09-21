@@ -43,7 +43,7 @@ def show_register():
 def show_chat():
     username = st.session_state.username
 
-    # Cargar mensajes del usuario actual
+    # Cargar mensajes del usuario actual (cada usuario tiene su propio archivo de mensajes)
     user_chats = load_messages(username)
 
     # Sidebar: lista de chats

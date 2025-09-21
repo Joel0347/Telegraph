@@ -1,0 +1,69 @@
+{
+  "joel": [
+    {
+      "from": "joel",
+      "to": "claudia",
+      "text": "hola q tal",
+      "timestamp": "2025-09-21T03:56:34.453839",
+      "leido": true
+    },
+    {
+      "from": "claudia",
+      "to": "joel",
+      "text": "todo bien",
+      "timestamp": "2025-09-21T03:56:58.149679",
+      "leido": false
+    },
+    {
+      "from": "claudia",
+      "to": "joel",
+      "text": "y tu q tal?",
+      "timestamp": "2025-09-21T03:57:02.706076",
+      "leido": false
+    },
+    {
+      "from": "joel",
+      "to": "claudia",
+      "text": "todo ok",
+      "timestamp": "2025-09-21T03:57:22.311643",
+      "leido": true
+    },
+    {
+      "from": "claudia",
+      "to": "joel",
+      "text": "q bueno me alegrp",
+      "timestamp": "2025-09-21T03:59:21.591043",
+      "leido": false
+    }
+  ],
+  "janice": [
+    {
+      "from": "janice",
+      "to": "claudia",
+      "text": "hola claudia!!!",
+      "timestamp": "2025-09-21T03:58:15.286749",
+      "leido": true
+    },
+    {
+      "from": "janice",
+      "to": "claudia",
+      "text": "hace rato no te veo",
+      "timestamp": "2025-09-21T03:58:24.743177",
+      "leido": true
+    },
+    {
+      "from": "claudia",
+      "to": "janice",
+      "text": "jeje",
+      "timestamp": "2025-09-21T03:58:46.967401",
+      "leido": false
+    },
+    {
+      "from": "claudia",
+      "to": "janice",
+      "text": "q bien",
+      "timestamp": "2025-09-21T03:58:50.167684",
+      "leido": false
+    }
+  ]
+}
