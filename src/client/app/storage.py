@@ -29,6 +29,8 @@ def mark_messages_as_read(user, from_user):
                 msg["leido"] = True
                 changed = True
     if changed:
+        # Crear directorio si no existe
+        os.makedirs(os.path.dirname(storage_path), exist_ok=True)
         with open(storage_path, "w") as f:
             json.dump(chats, f, indent=2)
 
@@ -47,6 +49,7 @@ def mark_messages_as_read(user, from_user):
                     msg["leido"] = True
                     sender_changed = True
         if sender_changed:
+            os.makedirs(os.path.dirname(sender_path), exist_ok=True)
             with open(sender_path, "w") as f:
                 json.dump(sender_chats, f, indent=2)
 
@@ -88,6 +91,7 @@ def save_message(sender, receiver, text):
     if receiver not in sender_chats:
         sender_chats[receiver] = []
     sender_chats[receiver].append(msg)
+    os.makedirs(os.path.dirname(sender_path), exist_ok=True)
     with open(sender_path, "w") as f:
         json.dump(sender_chats, f, indent=2)
 
@@ -107,5 +111,6 @@ def save_message(sender, receiver, text):
     msg_receiver = msg.copy()
     msg_receiver["leido"] = False
     receiver_chats[sender].append(msg_receiver)
+    os.makedirs(os.path.dirname(receiver_path), exist_ok=True)
     with open(receiver_path, "w") as f:
         json.dump(receiver_chats, f, indent=2)
