@@ -14,14 +14,17 @@ def show_login():
 
     if st.button("Iniciar Sesion"):
         res = requests.post(f"{API_URL}/login", json={"username": username, "password": password})
-        if res.status_code == 200:
+        st.write(res.json())
+        _publish_status(res.json())
+        
+        if res.json()["status"] == 200:
             st.session_state.username = username
             st.session_state.page = "chat"
-        else:
-            _publish_status(res.json())
+            st.rerun()
 
     if st.button("Registrarse"):
         st.session_state.page = "register"
+        st.rerun()
 
 def show_register():
     st.title("Telegraph - Registro")
@@ -31,14 +34,11 @@ def show_register():
 
     if st.button("Crear cuenta"):
         res = requests.post(f"{API_URL}/register", json={"username": username, "password": password})
-        if res.status_code == 200:
-            st.success("Registro exitoso. Ahora puedes iniciar sesión.")
-            st.session_state.page = "login"
-        else:
-            _publish_status(res.json())
+        _publish_status(res.json())
 
-    if st.button("Volver al Inicio de Sesion"):
-        st.session_state.page = "login"
+        if res.json()["status"] == 200:
+            st.session_state.page = "login"
+            st.rerun()
 
 def show_chat():
     username = st.session_state.username

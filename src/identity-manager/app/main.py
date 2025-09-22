@@ -17,8 +17,9 @@ def register():
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
-    result = login_user(data.get("username"), data.get("password"))
-    return jsonify(result)
+    username = data.get("username")
+    password = data.get("password")
+    return login_user(username, password)
 
 
 @app.route('/users', methods=['GET'])
