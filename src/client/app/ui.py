@@ -1,9 +1,14 @@
 import streamlit as st
 import requests
+import socket
+from streamlit_autorefresh import st_autorefresh
+from storage import get_storage_path
+import os, json
 from messaging import send_message
 from storage import load_messages  # Asegúrate de tener estas funciones
 from storage import mark_messages_as_read
 from messaging import get_chat
+
 API_URL = "http://identity-manager:8000"
 
 def show_login():
@@ -13,7 +18,14 @@ def show_login():
     password = st.text_input("Contraseña", type="password", key="login_pass")
 
     if st.button("Iniciar Sesion"):
-        res = requests.post(f"{API_URL}/login", json={"username": username, "password": password})
+        ip = get_local_ip()
+        port = 9000  # o configurable
+        res = requests.post(f"{API_URL}/login", json={
+            "username": username,
+            "password": password,
+            "ip": ip,
+            "port": port
+        })
         st.write(res.json())
         _publish_status(res.json())
         
@@ -33,15 +45,33 @@ def show_register():
     password = st.text_input("Nueva contraseña", type="password", key="reg_pass")
 
     if st.button("Crear cuenta"):
-        res = requests.post(f"{API_URL}/register", json={"username": username, "password": password})
+        ip = get_local_ip()
+        port = 9000
+        res = requests.post(f"{API_URL}/register", json={
+            "username": username,
+            "password": password,
+            "ip": ip,
+            "port": port
+        })
+
         _publish_status(res.json())
 
         if res.json()["status"] == 200:
             st.session_state.page = "login"
             st.rerun()
 
+
 def show_chat():
     username = st.session_state.username
+    # Refrescar cada 2 segundos sin bloquear la UI
+    st_autorefresh(interval=2000, key="chat_autorefresh")
+
+
+    trigger_path = f"/data/trigger_{username}.flag"
+    if os.path.exists(trigger_path):
+        os.remove(trigger_path)
+        st.experimental_rerun()
+
 
     # Cargar mensajes del usuario actual (cada usuario tiene su propio archivo de mensajes)
     user_chats = load_messages(username)
@@ -107,8 +137,6 @@ def show_chat():
             if st.button("Iniciar chat", key="start_chat_btn"):
                 # Si el chat no existe, crear la entrada vacía en el archivo de mensajes
                 if new_receiver not in user_chats:
-                    from storage import get_storage_path
-                    import os, json
                     storage_path = get_storage_path(username)
                     # Crear directorio si no existe
                     os.makedirs(os.path.dirname(storage_path), exist_ok=True)
@@ -137,6 +165,17 @@ def _publish_status(response: dict):
         st.error(response['message'])
     else:
         st.error("Error inesperado")
+
+def get_local_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+    except:
+        ip = "127.0.0.1"
+    finally:
+        s.close()
+    return ip
 
 def launch_ui():
     # Inicializa el estado de navegación

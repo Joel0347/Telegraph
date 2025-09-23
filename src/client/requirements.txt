@@ -1,3 +1,4 @@
 flask
 streamlit
 requests
+streamlit_autorefresh
