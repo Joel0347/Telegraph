@@ -5,7 +5,7 @@ from database import load_users, save_users
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
-def register_user(username: str, password: str):
+def register_user(username: str, password: str, ip: str = "", port: int = 0):
     try:
         if not username or not password:
             return jsonify({"error": "Faltan datos"}), 400
@@ -17,8 +17,11 @@ def register_user(username: str, password: str):
 
         users.append({
             "username": username,
-            "password": hash_password(password)
+            "password": hash_password(password),
+            "ip": ip,
+            "port": port
         })
+
         save_users(users)
         return {"message": f"Usuario {username} registrado correctamente", "status": 200}
 
@@ -26,12 +29,16 @@ def register_user(username: str, password: str):
         return jsonify({"error": str(e), "status": 500})
     
 
-def login_user(username, password):
+def login_user(username, password, ip="", port=0):
     users = load_users()
     user = next((u for u in users if u["username"] == username), None)
     if not user:
         return {"message": "El usuario no existe", "status": 500}
     hashed = hash_password(password)
     if user.get("password") == hashed:
+        user["ip"] = ip
+        user["port"] = port
+        save_users(users)
         return {"message": 'Login exitoso', "status": 200}
+
     return {"message": 'Contraseña incorrecta', "status": 409}
