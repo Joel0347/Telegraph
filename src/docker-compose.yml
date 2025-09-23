@@ -1,28 +1,17 @@
-# services:
-  # client:
-  #   build: ./client
-  #   image: src-client:latest
-  #   volumes:
-  #     - ./client/app:/app
-  #     - ./volumes/client-data:/data
-  #   ports:
-  #     - "5000:5000"
-  #   depends_on:
-  #     - identity-manager
-
-  # identity-manager:
-  #   build: ./identity-manager
-  #   image: src-identity-manager:latest
-  #   volumes:
-  #     - ./identity-manager/app:/app
-  #     - ./volumes/identity-data:/data
-  #   ports:
-  #     - "8000:8000"
-
-
-version: '3.8'
 services:
+  client:
+    build: ./client
+    image: src-client:latest
+    volumes:
+      - ./client/app:/app
+      - ./volumes/client-data:/data
+    ports:
+      - "5000:5000"
+    depends_on:
+      - identity-manager
+
   identity-manager:
+    build: ./identity-manager
     image: src-identity-manager:latest
     volumes:
       - ./identity-manager/app:/app
@@ -30,28 +19,39 @@ services:
     ports:
       - "8000:8000"
 
-  client-alice:
-    image: src-client:latest
-    volumes:
-      - ./client/app:/app
-      - ./volumes/alice-data:/data
-    ports:
-      - "5001:5000"
-    depends_on:
-      - identity-manager
-    environment:
-      - USERNAME=alice
-      - PORT=5000
 
-  client-bob:
-    image: src-client:latest
-    volumes:
-      - ./client/app:/app
-      - ./volumes/bob-data:/data
-    ports:
-      - "5002:5000"
-    depends_on:
-      - identity-manager
-    environment:
-      - USERNAME=bob
-      - PORT=5000
+# version: '3.8'
+# services:
+#   identity-manager:
+#     image: src-identity-manager:latest
+#     volumes:
+#       - ./identity-manager/app:/app
+#       - ./volumes/identity-data:/data
+#     ports:
+#       - "8000:8000"
+
+#   client-alice:
+#     image: src-client:latest
+#     volumes:
+#       - ./client/app:/app
+#       - ./volumes/alice-data:/data
+#     ports:
+#       - "5001:5000"
+#     depends_on:
+#       - identity-manager
+#     environment:
+#       - USERNAME=alice
+#       - PORT=5000
+
+#   client-bob:
+#     image: src-client:latest
+#     volumes:
+#       - ./client/app:/app
+#       - ./volumes/bob-data:/data
+#     ports:
+#       - "5002:5000"
+#     depends_on:
+#       - identity-manager
+#     environment:
+#       - USERNAME=bob
+#       - PORT=5000

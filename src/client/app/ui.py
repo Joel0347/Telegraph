@@ -12,39 +12,48 @@ from messaging import get_chat
 API_URL = "http://identity-manager:8000"
 
 def show_login():
-    st.title("Telegraph - Inicio de Sesion")
+    st.title("Telegraph - Inicio de Sesión")
 
     username = st.text_input("Usuario", key="login_user")
     password = st.text_input("Contraseña", type="password", key="login_pass")
+    
+    col1, col2 = st.columns([1, 3])
 
-    if st.button("Iniciar Sesion"):
-        ip = get_local_ip()
-        port = 9000  # o configurable
-        res = requests.post(f"{API_URL}/login", json={
-            "username": username,
-            "password": password,
-            "ip": ip,
-            "port": port
-        })
-        st.write(res.json())
-        _publish_status(res.json())
-        
-        if res.json()["status"] == 200:
-            st.session_state.username = username
-            st.session_state.page = "chat"
+    with col1:
+        if st.button("Iniciar Sesión", type='primary'):
+            ip = get_local_ip()
+            port = 9000  # o configurable
+            res = requests.post(f"{API_URL}/login", json={
+                "username": username,
+                "password": password,
+                "ip": ip,
+                "port": port
+            })
+            st.write(res.json())
+            _publish_status(res.json())
+            
+            if res.json()["status"] == 200:
+                st.session_state.username = username
+                st.session_state.page = "chat"
+                st.rerun()
+
+    with col2:
+        if st.button("Registrarse", type='primary'):
+            st.session_state.page = "register"
             st.rerun()
-
-    if st.button("Registrarse"):
-        st.session_state.page = "register"
-        st.rerun()
 
 def show_register():
     st.title("Telegraph - Registro")
 
-    username = st.text_input("Nuevo usuario", key="reg_user")
-    password = st.text_input("Nueva contraseña", type="password", key="reg_pass")
+    username = st.text_input("Usuario", key="reg_user")
+    password = st.text_input("Contraseña", type="password", key="reg_pass")
+    confirm_password = st.text_input("Confirmar Contraseña", type="password", key="reg_pass_confirm")
 
-    if st.button("Crear cuenta"):
+    if st.button("Crear cuenta", type='primary'):
+        if password != confirm_password:
+            st.error("Las contraseñas no coinciden")
+            return
+        
         ip = get_local_ip()
         port = 9000
         res = requests.post(f"{API_URL}/register", json={
@@ -57,7 +66,8 @@ def show_register():
         _publish_status(res.json())
 
         if res.json()["status"] == 200:
-            st.session_state.page = "login"
+            st.session_state.username = username
+            st.session_state.page = "chat"
             st.rerun()
 
 
@@ -70,11 +80,15 @@ def show_chat():
     trigger_path = f"/data/trigger_{username}.flag"
     if os.path.exists(trigger_path):
         os.remove(trigger_path)
-        st.experimental_rerun()
+        st.rerun()
 
 
     # Cargar mensajes del usuario actual (cada usuario tiene su propio archivo de mensajes)
     user_chats = load_messages(username)
+
+    if st.sidebar.button("Cerrar Sesión", type='primary'):
+        st.session_state.page = "login"
+        st.rerun()
 
     # Sidebar: lista de chats
     st.sidebar.title("Chats")
@@ -105,9 +119,25 @@ def show_chat():
                 ts = msg.get("timestamp", "")
                 leido = "✅" if msg.get("leido") else "🕓"
                 if msg["from"] == username:
-                    st.markdown(f"<div style='text-align:right; color:green;'>Tú: {msg['text']}<br><span style='font-size:10px;'>{ts} {leido}</span></div>", unsafe_allow_html=True)
+                    st.markdown(f"""
+                        <div style='text-align:right;'>
+                            <div style='display:inline-block; background-color:#2e7d32; color:white; padding:10px; border-radius:10px; max-width:70%; box-shadow:0px 2px 5px rgba(0,0,0,0.2);'>
+                                {msg['text']}<br>
+                                <span style='font-size:10px; color:#cfcfcf;'>{ts} {leido}</span>
+                            </div>
+                        </div>
+                        <br>
+                    """, unsafe_allow_html=True)
                 else:
-                    st.markdown(f"<div style='text-align:left; color:blue;'>{msg['from']}: {msg['text']}<br><span style='font-size:10px;'>{ts} {leido}</span></div>", unsafe_allow_html=True)
+                    st.markdown(f"""
+                        <div style='text-align:left;'>
+                            <div style='display:inline-block; background-color:#424242; color:white; padding:10px; border-radius:10px; max-width:70%; box-shadow:0px 2px 5px rgba(0,0,0,0.2);'>
+                                {msg['text']}<br>
+                                <span style='font-size:10px; color:#cfcfcf;'>{ts} {leido}</span>
+                            </div>
+                        </div>
+                        <br>
+                    """, unsafe_allow_html=True)
         st.markdown("<hr>", unsafe_allow_html=True)
         if "msg_input_key" not in st.session_state:
             st.session_state.msg_input_key = 0
