@@ -9,7 +9,7 @@ def send_message(sender, receiver, text):
     
     save_message(sender, receiver, text)
 
-    ip, port = get_peer_address(receiver)
+    ip, port = _get_peer_address(receiver)
     if not ip or not port:
         return f"No se encontró IP/puerto de {receiver}"
 
@@ -21,24 +21,21 @@ def send_message(sender, receiver, text):
     }
 
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((ip, port))
-        s.sendall(json.dumps(msg).encode())
-        s.close()
+        _socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        _socket.connect((ip, port))
+        _socket.sendall(json.dumps(msg).encode())
+        _socket.close()
         return f"Mensaje enviado a {receiver} vía red"
     except Exception as e:
         return f"Error al enviar a {receiver}: {e}"
 
-
-
 def get_chat(user, other):
     messages = load_messages(user)
     chat_msgs = messages.get(other, [])
-    # Ordenar por timestamp
     chat_msgs.sort(key=lambda m: m.get("timestamp", ""))
     return chat_msgs
 
-def get_peer_address(username):
+def _get_peer_address(username):
     try:
         res = requests.get("http://identity-manager:8000/peers")
         peers = res.json()
