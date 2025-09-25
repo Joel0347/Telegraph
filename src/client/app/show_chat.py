@@ -91,8 +91,8 @@ def _create_new_chat(username, user_chats):
     with st.sidebar.expander("Nuevo chat"):
         try:
             res = requests.get(f"{API_URL}/users")
-            if res.status_code == 200:
-                all_users = [u["username"] for u in res.json() if u["username"] != username]
+            if res.json()["status"] == 200:
+                all_users = [u["username"] for u in res.json()['usernames'] if u["username"] != username]
             else:
                 all_users = []
         except Exception:
