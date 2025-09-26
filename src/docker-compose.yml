@@ -20,15 +20,18 @@
 #       - "8000:8000"
 
 
-version: '3.8'
 services:
   identity-manager:
+    build: ./identity-manager
     image: src-identity-manager:latest
     volumes:
       - ./identity-manager/app:/app
       - ./volumes/identity-data:/data
     ports:
       - "8000:8000"
+
+  client:
+    build: "./client"
 
   client-alice:
     image: src-client:latest

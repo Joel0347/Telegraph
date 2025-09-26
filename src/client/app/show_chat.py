@@ -3,17 +3,18 @@ import os
 import json
 import requests
 from streamlit_autorefresh import st_autorefresh
-from storage import get_storage_path
 from messaging import send_message
-from storage import load_messages
-from storage import mark_messages_as_read
 from messaging import get_chat
+from repositories.msg_repo import MessageRepository
+from services.msg_service import MessageService
 from shared import API_URL
 
 def show_chat():
+    repo = MessageRepository()
+    service = MessageService(repo)
     username = st.session_state.username
     st_autorefresh(interval=2000, key="chat_autorefresh")
-    user_chats = load_messages(username)
+    user_chats = service.load_conversations(username)
 
     if st.sidebar.button("Cerrar Sesión", type='primary'):
         st.session_state.page = "login"
@@ -37,8 +38,8 @@ def show_chat():
         st.session_state.selected_chat = selected
 
     if st.session_state.selected_chat:
-        mark_messages_as_read(username, st.session_state.selected_chat)
-        user_chats = load_messages(username)
+        service.mark_as_read(username, st.session_state.selected_chat)
+        user_chats = service.load_conversations(username)
         _render_chat_area(username)
     else:
         st.info("No tienes chats activos. Escribe a alguien para comenzar.")
@@ -88,6 +89,9 @@ def _render_chat_area(username):
             st.rerun()
 
 def _create_new_chat(username, user_chats):
+    repo = MessageRepository()
+    service = MessageService(repo)
+    
     with st.sidebar.expander("Nuevo chat"):
         try:
             res = requests.get(f"{API_URL}/users")
@@ -102,21 +106,8 @@ def _create_new_chat(username, user_chats):
             new_receiver = st.selectbox("Selecciona usuario para chatear", all_users, key="new_chat_select")
             
             if st.button("Iniciar chat", key="start_chat_btn"):
-                if new_receiver not in user_chats:
-                    storage_path = get_storage_path(username)
-                    os.makedirs(os.path.dirname(storage_path), exist_ok=True)
-                    
-                    if not os.path.exists(storage_path):
-                        chats = {}
-                    else:
-                        with open(storage_path, "r") as f:
-                            try:
-                                chats = json.load(f)
-                            except json.JSONDecodeError:
-                                chats = {}
-                    chats[new_receiver] = []
-                    with open(storage_path, "w") as f:
-                        json.dump(chats, f, indent=2)
+                # if new_receiver not in user_chats:
+                #     service.save_message(username, new_receiver, "")
                 
                 st.session_state.selected_chat = new_receiver
                 st.rerun()
