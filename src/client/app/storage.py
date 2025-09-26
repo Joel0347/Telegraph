@@ -2,7 +2,7 @@ import json
 import os
 from datetime import datetime
 
-
+#borrar
 def get_storage_path(user_id):
     return os.path.join("messages", f"messages_{user_id}.json")
 

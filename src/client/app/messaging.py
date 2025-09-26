@@ -4,7 +4,7 @@ import requests
 from storage import save_message, load_messages
 from datetime import datetime
 
-
+#borrar
 def send_message(sender, receiver, text):
     
     save_message(sender, receiver, text)
@@ -38,7 +38,7 @@ def get_chat(user, other):
 def _get_peer_address(username):
     try:
         res = requests.get("http://identity-manager:8000/peers")
-        peers = res.json()
+        peers = res.json("peers")
         peer = next((p for p in peers if p["username"] == username), None)
         if peer:
             return peer["ip"], peer["port"]

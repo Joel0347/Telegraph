@@ -2,5 +2,4 @@ flask
 streamlit
 requests
 pydantic
-bson
 bcrypt

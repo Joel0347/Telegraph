@@ -6,11 +6,7 @@ from models.user import User
 
 
 class UserRepository:
-    def __init__(
-            self, dbpath=os.path.join(
-                os.path.dirname(__file__), '..', 'data', 'users.json'
-            )
-        ):
+    def __init__(self, dbpath=os.path.join('/data', 'users.json')):
         self._lock = Lock()
         self.dbpath = os.path.abspath(dbpath)
 
