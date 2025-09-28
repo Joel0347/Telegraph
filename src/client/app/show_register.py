@@ -1,5 +1,5 @@
 import streamlit as st
-import requests
+import requests, os
 from shared import get_local_ip, publish_status, API_URL
 
 def show_register():
@@ -15,12 +15,13 @@ def show_register():
             return
         
         ip = get_local_ip()
-        port = 9000
+        os.environ['USERNAME'] = username
+
         res = requests.post(f"{API_URL}/register", json={
             "username": username,
             "password": password,
             "ip": ip,
-            "port": port
+            "port": int(os.getenv("API_PORT", 8000))
         })
 
         publish_status(res.json())

@@ -1,10 +1,7 @@
 import streamlit as st
-import os
-import json
 import requests
 from streamlit_autorefresh import st_autorefresh
-from messaging import send_message
-from messaging import get_chat
+from sender import send_message
 from repositories.msg_repo import MessageRepository
 from services.msg_service import MessageService
 from shared import API_URL
@@ -47,20 +44,22 @@ def show_chat():
     _create_new_chat(username, user_chats)
     
 def _render_chat_area(username):
+    repo = MessageRepository()
+    service = MessageService(repo)
     st.markdown(f"<h2 style='text-align:center;'>{st.session_state.selected_chat}</h2>", unsafe_allow_html=True)
     st.markdown("<hr>", unsafe_allow_html=True)
-    chat_msgs = get_chat(username, st.session_state.selected_chat)
+    chat_msgs = service.get_chat(username, st.session_state.selected_chat)
     chat_box = st.container()
     with chat_box:
         for msg in chat_msgs:
             ts = msg.get("timestamp", "")
-            leido = "✅" if msg.get("leido") else "🕓"
             if msg["from"] == username:
+                read = "✅" if msg.get("read") else "🕓"
                 st.markdown(f"""
                     <div style='text-align:right;'>
                         <div style='display:inline-block; background-color:#2e7d32; color:white; padding:10px; border-radius:10px; max-width:70%; box-shadow:0px 2px 5px rgba(0,0,0,0.2);'>
                             {msg['text']}<br>
-                            <span style='font-size:10px; color:#cfcfcf;'>{ts} {leido}</span>
+                            <span style='font-size:10px; color:#cfcfcf;'>{ts} {read}</span>
                         </div>
                     </div>
                     <br>
@@ -70,7 +69,7 @@ def _render_chat_area(username):
                     <div style='text-align:left;'>
                         <div style='display:inline-block; background-color:#424242; color:white; padding:10px; border-radius:10px; max-width:70%; box-shadow:0px 2px 5px rgba(0,0,0,0.2);'>
                             {msg['text']}<br>
-                            <span style='font-size:10px; color:#cfcfcf;'>{ts} {leido}</span>
+                            <span style='font-size:10px; color:#cfcfcf;'>{ts}</span>
                         </div>
                     </div>
                     <br>
