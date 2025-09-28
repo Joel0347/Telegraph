@@ -44,7 +44,7 @@ class MessageRepository:
     def save(self, user_id: str, groups: Dict[str, List[Message]]):
         path = self._path_for(user_id)
         raw = {
-            other: [m.model_dump(by_alias=True) for m in msgs]
+            other: [m.model_dump(by_alias=True, mode="json") for m in msgs]
             for other, msgs in groups.items()
         }
         with self._lock:
@@ -56,7 +56,7 @@ class MessageRepository:
             raw = self._read_all(path)
             if other not in raw:
                 raw[other] = []
-            raw[other].append(message.model_dump(by_alias=True))
+            raw[other].append(message.model_dump(by_alias=True, mode="json"))
             self._write_all(path, raw)
 
     def mark_messages_from_as_read(self, user_id: str, from_user: str) -> int:
@@ -72,3 +72,22 @@ class MessageRepository:
                 if changed:
                     self._write_all(path, raw)
         return changed
+    
+    def mark_messages_sent_to_as_read(self, user_id: str, to_user: str) -> int:
+        """
+        Marca como leídos los mensajes que *user_id* envió a *to_user*
+        (archivo messages_<user_id>.json, clave = to_user).
+        """
+        path = self._path_for(user_id)
+        changed = 0
+        with self._lock:
+            raw = self._read_all(path)
+            if to_user in raw and isinstance(raw[to_user], list):
+                for m in raw[to_user]:
+                    if m.get("from") == user_id and m.get("to") == to_user and not m.get("read", False):
+                        m["read"] = True
+                        changed += 1
+                if changed:
+                    self._write_all(path, raw)
+        return changed
+
