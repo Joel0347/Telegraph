@@ -47,5 +47,10 @@ def list_users():
     usernames = auth_service.list_usernames()
     return jsonify({"usernames": usernames, "status": 200})
 
+@app.route("/users/<username>", methods=["GET"])
+def find_by_username(username: str):
+    msg = auth_service.get_user_by_username(username)
+    return jsonify(msg)
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)

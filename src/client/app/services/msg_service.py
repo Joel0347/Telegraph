@@ -1,5 +1,5 @@
 import requests
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Literal
 from datetime import datetime
 from models.message import Message
 from repositories.msg_repo import MessageRepository
@@ -12,15 +12,19 @@ class MessageService:
         self.repo = repo
         self.identity_manager_url = identity_manager_url
 
-    def save_message(self, sender: str, receiver: str, text: str, sended: bool) -> Message:
+    def save_message(
+        self, sender: str, receiver: str, text: str,
+        status: Literal["ok", "pending"], sent: bool
+    ) -> Message:
         msg = Message(
             from_=sender,
             to=receiver,
             text=text,
             timestamp=datetime.utcnow().isoformat(),
-            read=False
+            read=False,
+            status=status
         )
-        if sended:
+        if sent:
             self.repo.append_message(sender, receiver, msg)
         else:
             self.repo.append_message(receiver, sender, msg)    

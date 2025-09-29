@@ -9,26 +9,29 @@ def show_login():
     password = st.text_input("Contraseña", type="password", key="login_pass")
     
     col1, col2 = st.columns([1, 3])
-
+    login = False
     with col1:
         if st.button("Iniciar Sesión", type='primary'):
-            ip = get_local_ip()
-            os.environ['USERNAME'] = username
-            res = requests.post(f"{API_URL}/login", json={
-                "username": username,
-                "password": password,
-                "ip": ip,
-                "port": int(os.getenv("API_PORT", 8000)),
-                "status": "online"
-            })
-            publish_status(res.json())
-            
-            if res.json()["status"] == 200:
-                st.session_state.username = username
-                st.session_state.page = "chat"
-                st.rerun()
+            login = True
 
     with col2:
         if st.button("Registrarse", type='primary'):
             st.session_state.page = "register"
+            st.rerun()
+            
+    if login:
+        ip = get_local_ip()
+        os.environ['USERNAME'] = username
+        res = requests.post(f"{API_URL}/login", json={
+            "username": username,
+            "password": password,
+            "ip": ip,
+            "port": int(os.getenv("API_PORT", 8000)),
+            "status": "online"
+        })
+        publish_status(res.json())
+        
+        if res.json()["status"] == 200:
+            st.session_state.username = username
+            st.session_state.page = "chat"
             st.rerun()
