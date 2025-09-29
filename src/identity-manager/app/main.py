@@ -29,6 +29,14 @@ def login():
 
     return jsonify(msg)
 
+@app.route("/logout", methods=["POST"])
+def logout():
+    data = request.get_json(force=True)
+    username = data.get("username", "")
+    msg = auth_service.update_status(username=username, status="offline")
+    return jsonify(msg)
+
+
 @app.route("/peers", methods=["GET"])
 def get_peers():
     peers = auth_service.get_peers()

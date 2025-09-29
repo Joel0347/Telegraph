@@ -1,6 +1,5 @@
-from flask import jsonify
 from bcrypt import hashpw, checkpw, gensalt
-from typing import Tuple
+from typing import Tuple, Literal
 from repositories.user_repo import UserRepository
 from models.user import User
 
@@ -50,7 +49,7 @@ class AuthService:
                 }
 
             user = User(
-                username=username, ip=ip, port=port,
+                username=username, ip=ip, port=port, status="online",
                 password=AuthService.hash_password(password)
             )
 
@@ -74,12 +73,25 @@ class AuthService:
             if AuthService.check_password(password, user.password):
                 user.ip = ip
                 user.port = port
+                user.status = "online"
                 self.repo.update_user(user)
                 return {"message": 'Login exitoso', "status": 200}
 
             return {"message": 'Contraseña incorrecta', "status": 409}
         except Exception as e:
             return {"message": str(e), "status": 500}
+        
+    def update_status(self, username: str, status: Literal["online", "offline"]):
+        try:
+            user = self.repo.find_by_username(username)
+            if not user:
+                return {"message": "El usuario no existe", "status": 500}
+            user.status = status
+            self.repo.update_user(user)
+            return {"message": 'Logout exitoso', "status": 200}
+        except Exception as e:
+            return {"message": str(e), "status": 500}
+
     
     def get_peers(self) -> list[dict]:
         users = self.repo.list_all()
