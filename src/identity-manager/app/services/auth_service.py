@@ -70,14 +70,20 @@ class AuthService:
             if not user:
                 return {"message": "El usuario no existe", "status": 500}
             
-            if AuthService.check_password(password, user.password):
-                user.ip = ip
-                user.port = port
-                user.status = "online"
-                self.repo.update_user(user)
-                return {"message": 'Login exitoso', "status": 200}
-
-            return {"message": 'Contraseña incorrecta', "status": 409}
+            if not AuthService.check_password(password, user.password):
+                return {"message": 'Contraseña incorrecta', "status": 409}
+            
+            if user.status == "online":
+                return {
+                    "message": "Sesión ya iniciada",
+                    "status": 403
+                }
+            
+            user.ip = ip
+            user.port = port
+            user.status = "online"
+            self.repo.update_user(user)
+            return {"message": 'Login exitoso', "status": 200}
         except Exception as e:
             return {"message": str(e), "status": 500}
         
@@ -103,3 +109,10 @@ class AuthService:
     def list_usernames(self) -> list[dict]:
         users = self.repo.list_all()
         return [{"username": u.username} for u in users]
+    
+    def get_user_by_username(self, username: str) -> User:
+        try:
+            user = self.repo.find_by_username(username)
+            return {"message": user.model_dump(), "status": 200}
+        except Exception as e:
+            return {"message": str(e), "status": 500}

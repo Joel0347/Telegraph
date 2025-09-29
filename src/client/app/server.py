@@ -37,7 +37,7 @@ def receive_message():
     if local_user and receiver != local_user:
         return jsonify({"error": "destinatario incorrecto"}), 403
 
-    _service.save_message(sender, receiver, text, sended=False)
+    _service.save_message(sender, receiver, text, status="ok", sent=False)
     logging.info(f"Mensaje recibido de {sender} para {receiver}")
     return jsonify({"status": "ok"}), 200
 

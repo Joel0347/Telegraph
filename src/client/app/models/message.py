@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
+from typing import Literal
 
 class Message(BaseModel):
     from_: str = Field(..., alias="from", min_length=1)
@@ -7,6 +8,7 @@ class Message(BaseModel):
     text: str
     timestamp: datetime
     read: bool
+    status: Literal["ok", "pending"]
 
     model_config = {
         "from_attributes": True,

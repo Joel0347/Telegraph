@@ -20,9 +20,7 @@ def get_local_ip():
 def publish_status(response: dict): 
     if response.get("status") == 200:
         st.success(response['message'])
-    elif response.get("status") == 409:
+    elif response.get("status") != 500:
         st.warning(response['message'])
-    elif response.get("status") == 500:
-        st.error(response['message'])
     else:
-        st.error("Error inesperado")
+        st.error(response['message'])
