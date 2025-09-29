@@ -4,7 +4,7 @@ from streamlit_autorefresh import st_autorefresh
 from sender import send_message
 from repositories.msg_repo import MessageRepository
 from services.msg_service import MessageService
-from shared import API_URL
+from shared import API_URL, publish_status
 
 def show_chat():
     repo = MessageRepository()
@@ -14,6 +14,8 @@ def show_chat():
     user_chats = service.load_conversations(username)
 
     if st.sidebar.button("Cerrar Sesión", type='primary'):
+        res = requests.post(f"{API_URL}/logout", json={"username": username})
+        publish_status(res.json())
         st.session_state.page = "login"
         st.rerun()
 

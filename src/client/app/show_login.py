@@ -18,7 +18,8 @@ def show_login():
                 "username": username,
                 "password": password,
                 "ip": ip,
-                "port": int(os.getenv("API_PORT", 8000))
+                "port": int(os.getenv("API_PORT", 8000)),
+                "status": "online"
             })
             publish_status(res.json())
             

@@ -13,16 +13,3 @@ class Message(BaseModel):
         "extra": "forbid",
         "populate_by_name": True,
     }
-
-    # def to_json_dict(self) -> dict:
-    #     return {
-    #         "from": self.from_,
-    #         "to": self.to,
-    #         "text": self.text,
-    #         "timestamp": self.timestamp.isoformat(),
-    #         "read": self.read
-    #     }
-
-    # @classmethod
-    # def from_json_dict(cls, d: dict):
-    #     return cls.model_validate(d)
