@@ -28,7 +28,7 @@ services:
       - ./identity-manager/app:/app
       - ./volumes/identity-data:/data
     ports:
-      - "8000:8000"
+      - "8100:8000"
 
   client:
     build: "./client"
