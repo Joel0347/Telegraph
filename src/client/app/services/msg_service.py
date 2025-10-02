@@ -1,23 +1,21 @@
 import requests
-from typing import Dict, List, Optional, Literal
+from typing import Dict, List, Literal
 from datetime import datetime
 from models.message import Message
 from repositories.msg_repo import MessageRepository
+from services.api_handler_service import ApiHandlerService
 
 
 class MessageService:
     _instance = None
     repo: MessageRepository = None
-    identity_manager_url: str = None
+    api_srv: ApiHandlerService = None
     
-    def __new__(
-        cls, repo: MessageRepository,
-        identity_manager_url="http://identity-manager:8000"
-    ):
+    def __new__(cls, repo: MessageRepository, api_srv: ApiHandlerService):
         if cls._instance is None:
             cls._instance = super(MessageService, cls).__new__(cls)
             cls._instance.repo = repo
-            cls._instance.identity_manager_url = identity_manager_url
+            cls._instance.api_srv = api_srv
         return cls._instance
 
 
@@ -49,20 +47,8 @@ class MessageService:
                 for m in sorted(messages, key=lambda m: m.timestamp)
         ]
 
-    def get_peer_address(self, username: str) -> Optional[tuple]:
-        try:
-            res = requests.get(f"{self.identity_manager_url}/peers", timeout=2)
-            res.raise_for_status()
-            peers = res.json().get("peers", [])
-            peer = next((p for p in peers if p["username"] == username), None)
-            if peer:
-                return peer.get("ip"), peer.get("port")
-        except Exception:
-            return None
-        return None
-
     def _notify_read_receipt(self, sender: str, receiver: str) -> bool:
-        ip, port = self.get_peer_address(sender)
+        ip, port = self.api_srv.get_peer_address(sender)
         if not ip or not port:
             return False
         try:

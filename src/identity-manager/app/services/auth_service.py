@@ -2,6 +2,7 @@ from bcrypt import hashpw, checkpw, gensalt
 from typing import Tuple, Literal
 from repositories.user_repo import UserRepository
 from models.user import User
+from datetime import datetime
 
 
 class AuthService:
@@ -56,7 +57,8 @@ class AuthService:
 
             user = User(
                 username=username, ip=ip, port=port, status="online",
-                password=AuthService.hash_password(password)
+                password=AuthService.hash_password(password),
+                last_seen=datetime.now()
             )
 
             self.repo.add_user(user)
@@ -88,6 +90,7 @@ class AuthService:
             user.ip = ip
             user.port = port
             user.status = "online"
+            user.last_seen = datetime.now()
             self.repo.update_user(user)
             return {"message": 'Login exitoso', "status": 200}
         except Exception as e:
@@ -100,7 +103,18 @@ class AuthService:
                 return {"message": "El usuario no existe", "status": 500}
             user.status = status
             self.repo.update_user(user)
-            return {"message": 'Logout exitoso', "status": 200}
+            return {"message": 'Estado actualizado exitosamente', "status": 200}
+        except Exception as e:
+            return {"message": str(e), "status": 500}
+        
+    def update_last_seen(self, username: str):
+        try:
+            user = self.repo.find_by_username(username)
+            if not user:
+                return {"message": "El usuario no existe", "status": 500}
+            user.last_seen = datetime.now()
+            self.repo.update_user(user)
+            return {"message": 'Última vez actualizada exitosamente', "status": 200}
         except Exception as e:
             return {"message": str(e), "status": 500}
 
@@ -116,9 +130,12 @@ class AuthService:
         users = self.repo.list_all()
         return [{"username": u.username} for u in users]
     
+    def list_all(self) -> list[User]:
+        return self.repo.list_all()
+    
     def get_user_by_username(self, username: str) -> User:
         try:
             user = self.repo.find_by_username(username)
-            return {"message": user.model_dump(), "status": 200}
+            return {"message": user.model_dump(mode="json"), "status": 200}
         except Exception as e:
             return {"message": str(e), "status": 500}

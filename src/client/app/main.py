@@ -1,5 +1,5 @@
 import streamlit as st
-import threading
+import threading, os
 from server import start_flask_server
 from show_login import show_login
 from show_register import show_register
@@ -17,6 +17,9 @@ if "page" not in st.session_state:
     st.session_state.page = "login"
 if "username" not in st.session_state:
     st.session_state.username = ""
+# if os.getenv('USERNAME'):
+#     st.session_state.username = os.getenv('USERNAME')
+#     st.session_state.page = "chat"
 
 if st.session_state.page == "login":
     show_login()

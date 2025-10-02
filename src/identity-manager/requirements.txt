@@ -3,3 +3,4 @@ streamlit
 requests
 pydantic
 bcrypt
+apscheduler

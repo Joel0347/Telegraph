@@ -1,10 +1,12 @@
 import requests
 from services.msg_service import MessageService
 from repositories.msg_repo import MessageRepository
+from services.api_handler_service import ApiHandlerService
 from shared import API_URL
 
-_repo = MessageRepository()
-_service = MessageService(_repo)
+msg_repo = MessageRepository()
+api_srv = ApiHandlerService()
+msg_srv = MessageService(msg_repo, api_srv)
 
 def send_message(sender: str, receiver: str, text: str):
     res = requests.get(f"{API_URL}/users/{receiver}")
@@ -16,10 +18,9 @@ def send_message(sender: str, receiver: str, text: str):
         raise ValueError(res.json()["message"])
     
     status = "ok" if user["status"] == "online" else "pending"
-    _service.save_message(sender, receiver, text, status, sent=True)
     
     if status == "ok":
-        ip, port = _service.get_peer_address(receiver)
+        ip, port = api_srv.get_peer_address(receiver)
         url = f"http://{ip}:{port}/receive_message"
         payload = {"from": sender, "to": receiver, "text": text}
         try:
@@ -27,6 +28,10 @@ def send_message(sender: str, receiver: str, text: str):
             r.raise_for_status()
             print(f"Mensaje enviado a {receiver}")
         except Exception as e:
+            status = "pending"
             print(f"Error enviando mensaje a {receiver}: {e}")
+        finally:
+            msg_srv.save_message(sender, receiver, text, status, sent=True)
+
 
 

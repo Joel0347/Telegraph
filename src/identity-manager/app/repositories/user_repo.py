@@ -8,6 +8,7 @@ from models.user import User
 class UserRepository:
     _instance = None
     dbpath: str = None
+    _lock: Lock = None
     
     def __new__(cls, dbpath=os.path.join('/data', 'users.json')):
         if cls._instance is None:
@@ -54,7 +55,7 @@ class UserRepository:
             raw = self._read_all()
             if any(u.get("username") == user.username for u in raw):
                 raise ValueError("Usuario ya existe")
-            raw.append(user.model_dump())
+            raw.append(user.model_dump(mode="json"))
             self._write_all(raw)
 
 
@@ -63,7 +64,7 @@ class UserRepository:
             raw = self._read_all()
             for i, u in enumerate(raw):
                 if u.get("username") == user.username:
-                    raw[i] = user.model_dump()
+                    raw[i] = user.model_dump(mode="json")
                     self._write_all(raw)
                     return
             raise ValueError("Usuario no existe")

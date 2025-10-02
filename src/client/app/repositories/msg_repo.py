@@ -7,6 +7,7 @@ from models.message import Message
 class MessageRepository:
     _instance = None
     base_folder: str = None
+    _lock: Lock = None
         
     def __new__(cls, base_folder=os.path.join("/data", "messages")):
         if cls._instance is None:

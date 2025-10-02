@@ -26,7 +26,6 @@ services:
     depends_on:
       - identity-manager
     environment:
-      - USERNAME=alice
       - PORT=5000
       - API_PORT=8000
     networks:
@@ -43,7 +42,6 @@ services:
     depends_on:
       - identity-manager
     environment:
-      - USERNAME=bob
       - PORT=5000
       - API_PORT=8000
     networks:
@@ -60,7 +58,6 @@ services:
     depends_on:
       - identity-manager
     environment:
-      - USERNAME=ana
       - PORT=5000
       - API_PORT=8000
     networks:
