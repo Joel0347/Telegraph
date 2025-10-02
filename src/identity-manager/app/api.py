@@ -3,6 +3,7 @@ from services.auth_service import AuthService
 from repositories.user_repo import UserRepository
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta
+import requests
 
 
 app = Flask(__name__)
@@ -54,6 +55,11 @@ def find_by_username(username: str):
     msg = auth_service.get_user_by_username(username)
     return jsonify(msg)
 
+@app.route("/users/status/<username>", methods=["POST"])
+def notify_online(username: str):
+    msg = auth_service.update_status(username, "online")
+    return jsonify(msg)
+
 @app.post("/heartbeat")
 def heartbeat():
     """
@@ -79,6 +85,7 @@ def check_inactive_users():
     for u in users:
         if u.last_seen and (now - u.last_seen) > timeout and u.status != "offline":
             auth_service.update_status(u.username, "offline")
+            requests.post(f"http://{u.ip}:{u.port}/disconnect")
             app.logger.info(f"Usuario {u.username} marcado como offline por inactividad")
             
 # --- Inicializar scheduler ---

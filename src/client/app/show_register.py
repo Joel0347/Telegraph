@@ -1,8 +1,12 @@
 import streamlit as st
-import requests, os
-from shared import get_local_ip, publish_status, API_URL
+import os
+from services.api_handler_service import ApiHandlerService
+from services.client_info_service import ClientInfoService
 
 def show_register():
+    api_srv = ApiHandlerService()
+    client_srv = ClientInfoService()
+    
     st.title("Telegraph - Registro")
 
     username = st.text_input("Usuario", key="reg_user")
@@ -25,19 +29,8 @@ def show_register():
             st.error("Las contraseñas no coinciden")
             return
         
-        ip = get_local_ip()
-
-        res = requests.post(f"{API_URL}/register", json={
-            "username": username,
-            "password": password,
-            "ip": ip,
-            "port": int(os.getenv("API_PORT", 8000)),
-            "status": "online"
-        })
-
-        publish_status(res.json())
-
-        if res.json()["status"] == 200:
-            st.session_state.username = username
+        if api_srv.login_register(username, password, action="register"):
+            client_srv.save_username(username)
+            # st.session_state.username = username
             st.session_state.page = "chat"
             st.rerun()
