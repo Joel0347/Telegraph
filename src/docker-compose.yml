@@ -1,25 +1,3 @@
-# services:
-#   client:
-#     build: ./client
-#     image: src-client:latest
-#     volumes:
-#       - ./client/app:/app
-#       - ./volumes/client-data:/data
-#     ports:
-#       - "5000:5000"
-#     depends_on:
-#       - identity-manager
-
-#   identity-manager:
-#     build: ./identity-manager
-#     image: src-identity-manager:latest
-#     volumes:
-#       - ./identity-manager/app:/app
-#       - ./volumes/identity-data:/data
-#     ports:
-#       - "8000:8000"
-
-
 services:
   identity-manager:
     build: ./identity-manager
@@ -29,9 +7,13 @@ services:
       - ./volumes/identity-data:/data
     ports:
       - "8100:8000"
+    networks:
+      - telegraph-net
 
   client:
     build: "./client"
+    networks:
+      - telegraph-net
 
   client-alice:
     image: src-client:latest
@@ -47,6 +29,8 @@ services:
       - USERNAME=alice
       - PORT=5000
       - API_PORT=8000
+    networks:
+      - telegraph-net
 
   client-bob:
     image: src-client:latest
@@ -62,6 +46,8 @@ services:
       - USERNAME=bob
       - PORT=5000
       - API_PORT=8000
+    networks:
+      - telegraph-net
 
   client-ana:
     image: src-client:latest
@@ -77,3 +63,10 @@ services:
       - USERNAME=ana
       - PORT=5000
       - API_PORT=8000
+    networks:
+      - telegraph-net
+
+networks:
+  telegraph-net:
+    driver: bridge
+

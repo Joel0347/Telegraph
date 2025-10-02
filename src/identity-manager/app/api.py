@@ -2,9 +2,11 @@ from flask import Flask, request, jsonify
 from services.auth_service import AuthService
 from repositories.user_repo import UserRepository
 
+
 app = Flask(__name__)
 user_repo = UserRepository()
 auth_service = AuthService(user_repo)
+
 
 @app.route("/register", methods=["POST"])
 def register():
@@ -26,7 +28,6 @@ def login():
         ip=data.get("ip", ""),
         port=data.get("port", 0),
     )
-
     return jsonify(msg)
 
 @app.route("/logout", methods=["POST"])
@@ -35,7 +36,6 @@ def logout():
     username = data.get("username", "")
     msg = auth_service.update_status(username=username, status="offline")
     return jsonify(msg)
-
 
 @app.route("/peers", methods=["GET"])
 def get_peers():
@@ -51,6 +51,7 @@ def list_users():
 def find_by_username(username: str):
     msg = auth_service.get_user_by_username(username)
     return jsonify(msg)
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)

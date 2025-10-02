@@ -6,14 +6,20 @@ from models.user import User
 
 
 class UserRepository:
-    def __init__(self, dbpath=os.path.join('/data', 'users.json')):
-        self._lock = Lock()
-        self.dbpath = os.path.abspath(dbpath)
+    _instance = None
+    dbpath: str = None
+    
+    def __new__(cls, dbpath=os.path.join('/data', 'users.json')):
+        if cls._instance is None:
+            cls._instance = super(UserRepository, cls).__new__(cls)
+            cls._instance._lock = Lock()
+            cls._instance.dbpath = os.path.abspath(dbpath)
 
-        if not os.path.exists(self.dbpath):
-            os.makedirs(os.path.dirname(self.dbpath), exist_ok=True)
-            with open(self.dbpath, 'w', encoding='utf-8') as f:
-                f.write('[]')
+            if not os.path.exists(cls._instance.dbpath):
+                os.makedirs(os.path.dirname(cls._instance.dbpath), exist_ok=True)
+                with open(cls._instance.dbpath, 'w', encoding='utf-8') as f:
+                    f.write('[]')
+        return cls._instance
 
 
     def _read_all(self) -> List[dict]:
