@@ -51,31 +51,77 @@ def _render_chat_area(username):
     st.markdown(f"<h2 style='text-align:center;'>{st.session_state.selected_chat}</h2>", unsafe_allow_html=True)
     st.markdown("<hr>", unsafe_allow_html=True)
     chat_msgs = service.get_chat(username, st.session_state.selected_chat)
-    chat_box = st.container()
-    with chat_box:
-        for msg in chat_msgs:
-            ts = msg.get("timestamp", "")
-            if msg["from"] == username:
-                read = "✅" if msg.get("read") else "🕓"
-                st.markdown(f"""
-                    <div style='text-align:right;'>
-                        <div style='display:inline-block; background-color:#2e7d32; color:white; padding:10px; border-radius:10px; max-width:70%; box-shadow:0px 2px 5px rgba(0,0,0,0.2);'>
-                            {msg['text']}<br>
-                            <span style='font-size:10px; color:#cfcfcf;'>{ts} {read}</span>
-                        </div>
-                    </div>
-                    <br>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown(f"""
-                    <div style='text-align:left;'>
-                        <div style='display:inline-block; background-color:#424242; color:white; padding:10px; border-radius:10px; max-width:70%; box-shadow:0px 2px 5px rgba(0,0,0,0.2);'>
-                            {msg['text']}<br>
-                            <span style='font-size:10px; color:#cfcfcf;'>{ts}</span>
-                        </div>
-                    </div>
-                    <br>
-                """, unsafe_allow_html=True)
+    # CSS para el área scrolleable
+    st.markdown(
+        """
+        <style>
+        .chat-scroll-box {
+            height: 350px;
+            overflow-y: auto;
+            background: #0e1117;
+            border-radius: 12px;
+            border: 1px solid #222;
+            padding: 14px 8px 8px 8px;
+            margin-bottom: 0.5rem;
+        }
+        .msg-right { text-align: right; }
+        .msg-bubble-right {
+            display: inline-block;
+            background: #2e7d32;
+            color: white;
+            padding: 10px 14px;
+            border-radius: 10px;
+            margin: 2px 0;
+            max-width: 70%;
+            font-size: 1rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .msg-left { text-align: left; }
+        .msg-bubble-left {
+            display: inline-block;
+            background: #424242;
+            color: white;
+            padding: 10px 14px;
+            border-radius: 10px;
+            margin: 2px 0;
+            max-width: 70%;
+            font-size: 1rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .msg-meta {
+            font-size: 10px;
+            color: #cfcfcf;
+            margin-top: 2px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    # Construir HTML de todos los mensajes en un solo string
+    chat_html = "<div class='chat-scroll-box'>"
+    for msg in chat_msgs:
+        ts = msg.get("timestamp", "")
+        if msg["from"] == username:
+            read = "✅" if msg.get("read") else "🕓"
+            chat_html += (
+                f"<div class='msg-right'>"
+                f"<div class='msg-bubble-right'>"
+                f"{msg['text']}<br>"
+                f"<span class='msg-meta'>{ts} {read}</span>"
+                f"</div>"
+                f"</div>"
+            )
+        else:
+            chat_html += (
+                f"<div class='msg-left'>"
+                f"<div class='msg-bubble-left'>"
+                f"{msg['text']}<br>"
+                f"<span class='msg-meta'>{ts}</span>"
+                f"</div>"
+                f"</div>"
+            )
+    chat_html += "</div>"
+    st.markdown(chat_html, unsafe_allow_html=True)
     st.markdown("<hr>", unsafe_allow_html=True)
     
     if "msg_input_key" not in st.session_state:
