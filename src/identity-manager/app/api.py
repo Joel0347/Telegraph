@@ -1,6 +1,8 @@
 from flask import Flask, request, jsonify
 from services.auth_service import AuthService
 from repositories.user_repo import UserRepository
+from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime, timedelta
 
 
 app = Flask(__name__)
@@ -51,6 +53,38 @@ def list_users():
 def find_by_username(username: str):
     msg = auth_service.get_user_by_username(username)
     return jsonify(msg)
+
+@app.post("/heartbeat")
+def heartbeat():
+    """
+    Endpoint que los clientes llaman periódicamente para indicar que siguen activos.
+    """
+    data = request.get_json(silent=True) or {}
+    username = data.get("username")
+
+    if not username:
+        return jsonify({"message": "username requerido", "status": 400})
+
+    try:
+        auth_service.update_last_seen(username)
+        return jsonify({"message": "heartbeat recibido", "status": 200})
+    except Exception as e:
+        return jsonify({"message": str(e), "status": 500})
+
+# --- Job en background ---
+def check_inactive_users():
+    now = datetime.now()
+    timeout = timedelta(seconds=30)  # tolerancia 1 minuto
+    users = auth_service.list_all()
+    for u in users:
+        if u.last_seen and (now - u.last_seen) > timeout and u.status != "offline":
+            auth_service.update_status(u.username, "offline")
+            app.logger.info(f"Usuario {u.username} marcado como offline por inactividad")
+            
+# --- Inicializar scheduler ---
+scheduler = BackgroundScheduler()
+scheduler.add_job(func=check_inactive_users, trigger="interval", seconds=30)
+scheduler.start()
 
 
 if __name__ == "__main__":

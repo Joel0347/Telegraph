@@ -1,22 +1,23 @@
 import streamlit as st
-import requests
 from streamlit_autorefresh import st_autorefresh
 from sender import send_message
 from repositories.msg_repo import MessageRepository
 from services.msg_service import MessageService
-from shared import API_URL, publish_status
+from services.api_handler_service import ApiHandlerService
 
 def show_chat():
-    repo = MessageRepository()
-    service = MessageService(repo)
+    msg_repo = MessageRepository()
+    api_srv = ApiHandlerService()
+    msg_srv = MessageService(msg_repo, api_srv)
     username = st.session_state.username
     st_autorefresh(interval=2000, key="chat_autorefresh")
-    user_chats = service.load_conversations(username)
+    api_srv.send_heart_beat(username)
+    user_chats = msg_srv.load_conversations(username)
 
     if st.sidebar.button("Cerrar Sesión", type='primary'):
-        res = requests.post(f"{API_URL}/logout", json={"username": username})
-        publish_status(res.json())
+        api_srv.logout()
         st.session_state.page = "login"
+        st.session_state.pop('username')
         st.rerun()
 
     st.sidebar.title("Chats")
@@ -37,20 +38,20 @@ def show_chat():
         st.session_state.selected_chat = selected
 
     if st.session_state.selected_chat:
-        service.mark_as_read(username, st.session_state.selected_chat)
-        user_chats = service.load_conversations(username)
+        msg_srv.mark_as_read(username, st.session_state.selected_chat)
         _render_chat_area(username)
     else:
         st.info("No tienes chats activos. Escribe a alguien para comenzar.")
 
-    _create_new_chat(username, user_chats)
+    _create_new_chat(username)
     
 def _render_chat_area(username):
-    repo = MessageRepository()
-    service = MessageService(repo)
+    msg_repo = MessageRepository()
+    api_srv = ApiHandlerService()
+    msg_srv = MessageService(msg_repo, api_srv)
     st.markdown(f"<h2 style='text-align:center;'>{st.session_state.selected_chat}</h2>", unsafe_allow_html=True)
     st.markdown("<hr>", unsafe_allow_html=True)
-    chat_msgs = service.get_chat(username, st.session_state.selected_chat)
+    chat_msgs = msg_srv.get_chat(username, st.session_state.selected_chat)
     # CSS para el área scrolleable
     st.markdown(
         """
@@ -135,27 +136,16 @@ def _render_chat_area(username):
             st.session_state.msg_input_key += 1
             st.rerun()
 
-def _create_new_chat(username, user_chats):
-    repo = MessageRepository()
-    service = MessageService(repo)
+def _create_new_chat(username):
+    api_srv = ApiHandlerService()
     
     with st.sidebar.expander("Nuevo chat"):
-        try:
-            res = requests.get(f"{API_URL}/users")
-            if res.json()["status"] == 200:
-                all_users = [u["username"] for u in res.json()['usernames'] if u["username"] != username]
-            else:
-                all_users = []
-        except Exception:
-            all_users = []
+        all_users = api_srv.get_users(username)
         
         if all_users:
             new_receiver = st.selectbox("Selecciona usuario para chatear", all_users, key="new_chat_select")
             
             if st.button("Iniciar chat", key="start_chat_btn"):
-                # if new_receiver not in user_chats:
-                #     service.save_message(username, new_receiver, "")
-                
                 st.session_state.selected_chat = new_receiver
                 st.rerun()
         else:

@@ -21,7 +21,6 @@ def show_login():
             
     if login:
         ip = get_local_ip()
-        os.environ['USERNAME'] = username
         res = requests.post(f"{API_URL}/login", json={
             "username": username,
             "password": password,

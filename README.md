@@ -52,7 +52,6 @@ docker run -d \
   -v $(pwd)/volumes/client_name-data:/data \
   -p port_on_host:5000 \
   -p port_on_host:8000 \
-  -e USERNAME=client_name \
   -e PORT=5000 \
   -e API_PORT=8000 \
   src-client:latest
