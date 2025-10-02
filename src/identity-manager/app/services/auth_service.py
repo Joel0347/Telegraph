@@ -5,8 +5,14 @@ from models.user import User
 
 
 class AuthService:
-    def __init__(self, repo: UserRepository):
-        self.repo = repo
+    _instance = None
+    repo: UserRepository = None
+    
+    def __new__(cls, repo: UserRepository):
+        if cls._instance is None:
+            cls._instance = super(AuthService, cls).__new__(cls)
+            cls._instance.repo = repo
+        return cls._instance
 
 
     @staticmethod

@@ -4,13 +4,22 @@ from datetime import datetime
 from models.message import Message
 from repositories.msg_repo import MessageRepository
 
+
 class MessageService:
-    def __init__(
-        self, repo: MessageRepository,
+    _instance = None
+    repo: MessageRepository = None
+    identity_manager_url: str = None
+    
+    def __new__(
+        cls, repo: MessageRepository,
         identity_manager_url="http://identity-manager:8000"
     ):
-        self.repo = repo
-        self.identity_manager_url = identity_manager_url
+        if cls._instance is None:
+            cls._instance = super(MessageService, cls).__new__(cls)
+            cls._instance.repo = repo
+            cls._instance.identity_manager_url = identity_manager_url
+        return cls._instance
+
 
     def save_message(
         self, sender: str, receiver: str, text: str,

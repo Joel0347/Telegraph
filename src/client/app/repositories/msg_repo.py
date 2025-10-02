@@ -5,10 +5,17 @@ from typing import Dict, List
 from models.message import Message
 
 class MessageRepository:
-    def __init__(self, base_folder=os.path.join("/data", "messages")):
-        self._lock = Lock()
-        self.base_folder = base_folder
-        os.makedirs(self.base_folder, exist_ok=True)
+    _instance = None
+    base_folder: str = None
+        
+    def __new__(cls, base_folder=os.path.join("/data", "messages")):
+        if cls._instance is None:
+            cls._instance = super(MessageRepository, cls).__new__(cls)
+            cls._instance._lock = Lock()
+            cls._instance.base_folder = base_folder
+            os.makedirs(cls._instance.base_folder, exist_ok=True)
+        return cls._instance
+
 
     def _path_for(self, user_id: str) -> str:
         return os.path.join(self.base_folder, f"messages_{user_id}.json")
