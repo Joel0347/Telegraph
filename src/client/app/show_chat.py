@@ -1,23 +1,27 @@
 import streamlit as st
+import os
 from streamlit_autorefresh import st_autorefresh
 from sender import send_message
 from repositories.msg_repo import MessageRepository
 from services.msg_service import MessageService
 from services.api_handler_service import ApiHandlerService
+from services.client_info_service import ClientInfoService
 
 def show_chat():
     msg_repo = MessageRepository()
     api_srv = ApiHandlerService()
     msg_srv = MessageService(msg_repo, api_srv)
-    username = st.session_state.username
+    client_srv = ClientInfoService()
+    username = client_srv.get_username()
+    
     st_autorefresh(interval=2000, key="chat_autorefresh")
     api_srv.send_heart_beat(username)
     user_chats = msg_srv.load_conversations(username)
 
     if st.sidebar.button("Cerrar Sesión", type='primary'):
-        api_srv.logout()
+        api_srv.logout(username)
         st.session_state.page = "login"
-        st.session_state.pop('username')
+        client_srv.remove_username()
         st.rerun()
 
     st.sidebar.title("Chats")

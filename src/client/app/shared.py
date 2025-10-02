@@ -1,4 +1,4 @@
-import socket
+import socket, os
 import streamlit as st
 
 
@@ -17,9 +17,12 @@ def get_local_ip():
         _socket.close()
     return ip
 
+def get_local_port():
+    return int(os.getenv("API_PORT", 8000))
+
 def publish_status(response: dict): 
     if response.get("status") == 200:
-        st.success(response['message'])
+        return
     elif response.get("status") != 500:
         st.warning(response['message'])
     else:

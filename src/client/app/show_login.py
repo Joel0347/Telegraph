@@ -1,8 +1,12 @@
 import streamlit as st
-import requests, os
-from shared import get_local_ip, publish_status, API_URL
+import os
+from services.api_handler_service import ApiHandlerService
+from services.client_info_service import ClientInfoService
 
 def show_login():
+    api_srv = ApiHandlerService()
+    client_srv = ClientInfoService()
+    
     st.title("Telegraph - Inicio de Sesión")
 
     username = st.text_input("Usuario", key="login_user")
@@ -19,18 +23,8 @@ def show_login():
             st.session_state.page = "register"
             st.rerun()
             
-    if login:
-        ip = get_local_ip()
-        res = requests.post(f"{API_URL}/login", json={
-            "username": username,
-            "password": password,
-            "ip": ip,
-            "port": int(os.getenv("API_PORT", 8000)),
-            "status": "online"
-        })
-        publish_status(res.json())
-        
-        if res.json()["status"] == 200:
-            st.session_state.username = username
-            st.session_state.page = "chat"
-            st.rerun()
+    if login and api_srv.login_register(username, password, action="login"):
+        client_srv.save_username(username)
+        # st.session_state.username = username
+        st.session_state.page = "chat"
+        st.rerun()
