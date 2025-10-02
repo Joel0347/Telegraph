@@ -7,7 +7,10 @@ from show_chat import show_chat
 from services.api_handler_service import ApiHandlerService
 from services.client_info_service import ClientInfoService
 
-st.set_page_config(page_title="Telegraph", layout="centered")
+if "page" in st.session_state and st.session_state.page == "chat":
+    st.set_page_config(page_title="Telegraph", layout="wide")
+else:
+    st.set_page_config(page_title="Telegraph", layout="centered")
 
 # Iniciar el servidor Flask en segundo plano (para recibir mensajes HTTP)
 if "flask_started" not in st.session_state:
