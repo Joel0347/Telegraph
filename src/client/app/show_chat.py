@@ -18,6 +18,11 @@ def show_chat():
     api_srv.send_heart_beat(username)
     user_chats = msg_srv.load_conversations(username)
 
+    online_users = get_online_users(api_srv, username)
+    if online_users:
+        pending_mssgs_by_user = find_pending_mssgs_by_user(msg_srv, username, online_users)
+        send_pending_mssgs(pending_mssgs_by_user, username)
+    
     if st.sidebar.button("Cerrar Sesión", type='primary'):
         api_srv.logout(username)
         st.session_state.page = "login"
@@ -49,6 +54,59 @@ def show_chat():
 
     _create_new_chat(username)
     
+def get_online_users(api_srv, username):
+    active_users = []
+    try:
+        all_users = api_srv.get_users(username)
+        for u in all_users:
+            user_info = api_srv.get_user_by_username(u)
+            if user_info and user_info.get("status") == "online":
+                active_users.append(u)
+                
+        return active_users
+    except Exception as e:
+        pass
+    
+def find_pending_mssgs_by_user(msg_srv, username, active_users):
+    # --- NUEVO: Buscar mensajes pendientes por usuario activo ---
+    pending_to_send = {}
+    for other in active_users:
+        chat_msgs = msg_srv.get_chat(username, other)
+        # Solo revisar si hay mensajes en el chat
+        if not chat_msgs:
+            continue
+        # Buscar el último mensaje enviado por el usuario actual
+        last_idx = None
+        for i in range(len(chat_msgs)-1, -1, -1):
+            m = chat_msgs[i]
+            if m["from"] == username:
+                last_idx = i
+                break
+        if last_idx is None:
+            continue
+        # Si el último mensaje enviado está pendiente
+        if chat_msgs[last_idx]["status"] == "pending":
+            # Buscar hacia atrás todos los mensajes pendientes consecutivos
+            first_pending_idx = last_idx
+            for i in range(last_idx, -1, -1):
+                m = chat_msgs[i]
+                if m["from"] == username and m["status"] == "pending":
+                    first_pending_idx = i
+                elif m["from"] == username:
+                    break
+            # Guardar los mensajes pendientes a enviar
+            pending_to_send[other] = chat_msgs[first_pending_idx:last_idx+1]
+            
+    return pending_to_send
+
+def send_pending_mssgs(pending_to_send, username):
+    # --- NUEVO: Enviar mensajes pendientes uno a uno ---
+    for other, msgs in pending_to_send.items():
+        for m in msgs:
+            # Reenviar solo si sigue pendiente
+            if m["status"] == "pending":
+                send_message(username, other, m["text"])
+   
 def _render_chat_area(username):
     msg_repo = MessageRepository()
     api_srv = ApiHandlerService()
