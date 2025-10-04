@@ -7,6 +7,10 @@ def show_register():
     api_srv = ApiHandlerService()
     client_srv = ClientInfoService()
     
+    columns = st.columns(5)
+    with columns[2]:
+        st.image("static/logo_no_bg.png", width=160)
+
     st.title("Telegraph - Registro")
 
     username = st.text_input("Usuario", key="reg_user")
