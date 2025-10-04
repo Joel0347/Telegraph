@@ -32,25 +32,69 @@ def show_chat():
     st.sidebar.title("Chats")
     chat_partners = list(user_chats.keys())
 
+    # Obtener usuarios online
+    online_set = set(online_users) if online_users else set()
+
+    # Construir lista de info para la sidebar
+    sidebar_items = []
+    for partner in chat_partners:
+        msgs = user_chats[partner]
+        # Si los mensajes son objetos Message, acceder con .text
+        if msgs:
+            last = msgs[-1]
+            last_msg = getattr(last, "text", str(last))
+        else:
+            last_msg = ""
+        is_online = partner in online_set
+        sidebar_items.append({
+            "name": partner,
+            "online": is_online,
+            "last_msg": last_msg
+        })
+
     if "selected_chat" not in st.session_state:
         st.session_state.selected_chat = None
+    if st.session_state.selected_chat is None and sidebar_items:
+        st.session_state.selected_chat = sidebar_items[0]["name"]
+    # Mostrar lista custom y manejar selección
+    selected_idx = 0
+    if st.session_state.selected_chat:
+        for i, item in enumerate(sidebar_items):
+            if item["name"] == st.session_state.selected_chat:
+                selected_idx = i
+                break
 
-    index = chat_partners.index(st.session_state.selected_chat) \
-        if st.session_state.selected_chat in chat_partners else 0
-        
-    selected = st.sidebar.radio(
-        "Conversaciones", chat_partners, 
-        index=index
-    ) if chat_partners else None
-    
-    if selected:
-        st.session_state.selected_chat = selected
+    # Render manual de la lista y selección
+    for i, item in enumerate(sidebar_items):
+        is_selected = (i == selected_idx)
+        btn_label = item["name"]
+        btn_color = "#e7fbe9" if is_selected else "#fff"
+        btn_style = f"background-color:{btn_color}; color:#222; border-radius:8px; border:none; width:100%; text-align:left; padding:8px 6px; margin-bottom:0px; font-weight:bold;"
+        # Botón solo con el nombre, con estilo visual mejorado
+        st.sidebar.markdown(f"""
+            <div style='{btn_style}'>
+                <span>{btn_label}</span>
+            </div>
+        """, unsafe_allow_html=True)
+        if st.sidebar.button("Abrir chat", key=f"chat_{item['name']}", use_container_width=True):
+            st.session_state.selected_chat = item["name"]
+            st.rerun()
+        # Mostrar preview y estado debajo
+        color = "#25D366" if item["online"] else "#cfcfcf"
+        st.sidebar.markdown(f"""
+            <div style='display:flex; flex-direction:row; align-items:center; margin-bottom:10px; margin-top:-8px;'>
+                <div style='width:10px; height:10px; border-radius:50%; background:{color}; margin-right:10px; margin-top:4px;'></div>
+                <div style='flex:1;'>
+                    <div style='font-size:12px; color:#666; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;'>{item['last_msg']}</div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
 
     if st.session_state.selected_chat:
         msg_srv.mark_as_read(username, st.session_state.selected_chat)
         _render_chat_area(username)
     else:
-        st.info("No tienes chats activos. Escribe a alguien para comenzar.")
+        st.info("No tienes chats activos. Escribe a alguien para comenzar o selecciona 'Nuevo chat' en la barra lateral.")
 
     _create_new_chat(username)
     
@@ -111,9 +155,11 @@ def _render_chat_area(username):
     msg_repo = MessageRepository()
     api_srv = ApiHandlerService()
     msg_srv = MessageService(msg_repo, api_srv)
-    # st.markdown(f"<h2 style='text-align:center;'>{st.session_state.selected_chat}</h2>", unsafe_allow_html=True)
-    # st.markdown("<hr>", unsafe_allow_html=True)
-    chat_msgs = msg_srv.get_chat(username, st.session_state.selected_chat)
+    # Mostrar el nombre del usuario con quien se conversa
+    chat_with = st.session_state.selected_chat
+    st.markdown(f"<h2 style='text-align:center; margin-bottom: 0.5em;'>{chat_with}</h2>", unsafe_allow_html=True)
+    st.markdown("<hr>", unsafe_allow_html=True)
+    chat_msgs = msg_srv.get_chat(username, chat_with)
     # CSS para el área scrolleable
     chat_box = st.container()
     with chat_box:
