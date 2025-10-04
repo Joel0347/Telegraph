@@ -6,11 +6,20 @@ from show_register import show_register
 from show_chat import show_chat
 from services.api_handler_service import ApiHandlerService
 from services.client_info_service import ClientInfoService
+from PIL import Image
+
+# Cargar logo para favicon
+logo_path = "static/logo_no_bg.ico"
+logo_img = None
+try:
+    logo_img = Image.open(os.path.join(os.path.dirname(__file__), logo_path))
+except Exception:
+    logo_img = None
 
 if "page" in st.session_state and st.session_state.page == "chat":
-    st.set_page_config(page_title="Telegraph", layout="wide")
+    st.set_page_config(page_title="Telegraph", layout="wide", page_icon=logo_img or "📝")
 else:
-    st.set_page_config(page_title="Telegraph", layout="centered")
+    st.set_page_config(page_title="Telegraph", layout="centered", page_icon=logo_img or "📝")
 
 # Iniciar el servidor Flask en segundo plano (para recibir mensajes HTTP)
 if "flask_started" not in st.session_state:

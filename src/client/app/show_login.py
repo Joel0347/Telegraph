@@ -7,6 +7,10 @@ def show_login():
     api_srv = ApiHandlerService()
     client_srv = ClientInfoService()
     
+    columns = st.columns(5)
+    with columns[2]:
+        st.image("static/logo_no_bg.png", width=160)
+    
     st.title("Telegraph - Inicio de Sesión")
 
     username = st.text_input("Usuario", key="login_user")
