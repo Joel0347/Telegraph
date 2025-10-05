@@ -1,4 +1,11 @@
-# Telegraph
+<div style="text-align:center">
+  <img src="src/client/app/static/logo_no_bg.png" alt="Telegraph" style="width:600px; margin-bottom:0px;">
+  <div style="font-size:36px; font-weight:bold; margin-top:4px;">Telegraph</div>
+</div>
+
+<hr>
+<br>
+
 This is a peer-to-peer messaging application created using `python` combined with `streamlit` for the web UI. There are two entities which are the identity manager and the client(s).
 
 The identity manager is the one who manage every account information, such as:
