@@ -1,5 +1,79 @@
 # Telegraph
- A p2p messanger application
+This is a peer-to-peer messaging application created using `python` combined with `streamlit` for the web UI. There are two entities which are the identity manager and the client(s).
+
+The identity manager is the one who manage every account information, such as:
+
+- username
+- password encrypted
+- ip and port
+- status
+- last time seen online
+
+The clients can communicate with each other without a centralized server. Each client can do the following actions:
+
+- send messages
+- receive messages
+- notify that a message has been read
+- retry sending pending messages to offline users
+
+Messages are saved with the format:
+```json
+{
+  "from": "Joel", // user who sent the message
+  "to": "Claudia", // user who received the message
+  "text": "Hello World!", // text of the message
+  "timestamp":"2025-10-03T21:43:00-04:00", // time the message was sent
+  "read": true, // whether or not the message was read
+  "status": "ok" // ok: sent correctly, pending: failed when sent
+}
+```
+
+The schema below presents the structure of message handling and user login procedures:
+
+```mermaid
+graph TD
+
+    %% --- Autenticación ---
+    subgraph AUTH[🔐 Authentication Flow]
+        A1[User opens app] --> A2[Login or Register]
+        A2 --> A3[Call Identity Manager API]
+    end
+
+    %% --- Entrada a la App ---
+    A3 --> B1[🏠 Enter Main App]
+
+    subgraph DATA[📂 Data Loading]
+        B1 --> B2[Fetch Conversations]
+        B1 --> B3[Fetch User List]
+        B2 --> B4[Identity Manager API]
+        B3 --> B4
+    end
+
+    %% --- Conversación ---
+    B4 --> C1[💬 Open Conversation]
+    C1 --> C2[✍️ Write Message]
+    C2 --> C3[📤 Send Message]
+
+    subgraph DELIVERY[📡 Message Delivery]
+        C3 --> D1[Call Receiver Endpoint]
+        D1 --> D2[Receiver stores message in DB]
+
+        D2 --> E1{Was message read?}
+        E1 -->|Yes| E2[Notify Sender]
+        E2 --> E3[Sender updates 'read' field = true]
+        E1 -->|No| E4[Message remains unread]
+
+        D1 --> F1{Is sender/receiver offline?}
+        F1 -->|Yes| F2[Store as 'pending' in local DB]
+        F2 --> F3[Retry when receiver online]
+        F1 -->|No| F4[Message delivered normally]
+    end
+
+```
+
+## Only for Developers
+This section describes all the instructions to be followed for executing 
+the app correctly.
 
 ### Create python virtual environment
 ```bash
