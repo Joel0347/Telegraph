@@ -1,5 +1,6 @@
+# archivo listo para ser borrado si todo funciona
+
 import streamlit as st
-import os
 from services.api_handler_service import ApiHandlerService
 from services.client_info_service import ClientInfoService
 
@@ -35,6 +36,5 @@ def show_register():
         
         if api_srv.login_register(username, password, action="register"):
             client_srv.save_username(username)
-            # st.session_state.username = username
             st.session_state.page = "chat"
             st.rerun()

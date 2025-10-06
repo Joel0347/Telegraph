@@ -6,6 +6,8 @@ from show_register import show_register
 from show_chat import show_chat
 from services.api_handler_service import ApiHandlerService
 from services.client_info_service import ClientInfoService
+from components.auth import AuthModule
+from components.chat import ChatModule
 from PIL import Image
 
 # Cargar logo para favicon
@@ -29,18 +31,22 @@ if "flask_started" not in st.session_state:
 # Lógica de navegación
 if "page" not in st.session_state:
     st.session_state.page = "login"
-# if "username" not in st.session_state:
-#     st.session_state.username = ""
+
 client_srv = ClientInfoService()
+api_srv = ApiHandlerService()
+auth_module = AuthModule(api_srv, client_srv)
+chat_module = ChatModule(api_srv, client_srv)
+
 if username := client_srv.get_username():
-    api_srv = ApiHandlerService()
     api_srv.notify_online(username)
-    # st.session_state.username = os.getenv('USERNAME')
     st.session_state.page = "chat"
 
 if st.session_state.page == "login":
-    show_login()
+    # show_login()
+    auth_module.show(action="login")
 elif st.session_state.page == "register":
-    show_register()
+    # show_register()
+    auth_module.show(action="register")
 elif st.session_state.page == "chat":
-    show_chat()
+    # show_chat()
+    chat_module.show()

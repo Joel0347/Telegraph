@@ -2,10 +2,6 @@ import socket, os
 import streamlit as st
 
 
-global API_URL
-API_URL = "http://identity-manager:8000"
-
-
 def get_local_ip():
     _socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
