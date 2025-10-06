@@ -58,6 +58,24 @@ class MessageService:
             return r.status_code == 200
         except Exception:
             return False
+    
+    def send_message(self, sender: str, receiver: str, text: str):
+        user = self.api_srv.get_user_by_username(receiver)
+        status = "ok" if user["status"] == "online" else "pending"
+        
+        if status == "ok":
+            ip, port = self.api_srv.get_peer_address(receiver)
+            url = f"http://{ip}:{port}/receive_message"
+            payload = {"from": sender, "to": receiver, "text": text}
+            try:
+                r = requests.post(url, json=payload, timeout=3)
+                r.raise_for_status()
+                print(f"Mensaje enviado a {receiver}")
+            except Exception as e:
+                status = "pending"
+                print(f"Error enviando mensaje a {receiver}: {e}")
+    
+        self.save_message(sender, receiver, text, status, sent=True)
 
     def mark_as_read(self, user: str, from_user: str) -> int:
         changed = self.repo.mark_messages_from_as_read(user, from_user)
@@ -81,3 +99,43 @@ class MessageService:
             for other, msgs in groups.items():
                 total += sum(1 for m in msgs if not m.read and m.to == user)
         return total
+    
+    def find_pending_mssgs_by_user(self, username: str, users: list[dict]) -> dict:
+        # --- NUEVO: Buscar mensajes pendientes por usuario activo ---
+        pending_to_send = {}
+        for other in users:
+            chat_msgs = self.get_chat(username, other)
+            # Solo revisar si hay mensajes en el chat
+            if not chat_msgs:
+                continue
+            # Buscar el último mensaje enviado por el usuario actual
+            last_idx = None
+            for i in range(len(chat_msgs)-1, -1, -1):
+                m = chat_msgs[i]
+                if m["from"] == username:
+                    last_idx = i
+                    break
+            if last_idx is None:
+                continue
+            # Si el último mensaje enviado está pendiente
+            if chat_msgs[last_idx]["status"] == "pending":
+                # Buscar hacia atrás todos los mensajes pendientes consecutivos
+                first_pending_idx = last_idx
+                for i in range(last_idx, -1, -1):
+                    m = chat_msgs[i]
+                    if m["from"] == username and m["status"] == "pending":
+                        first_pending_idx = i
+                    elif m["from"] == username:
+                        break
+                # Guardar los mensajes pendientes a enviar
+                pending_to_send[other] = chat_msgs[first_pending_idx:last_idx+1]
+                
+        return pending_to_send
+    
+    def send_pending_mssgs(self, pending_to_send: dict, username: str):
+        # --- NUEVO: Enviar mensajes pendientes uno a uno ---
+        for other, msgs in pending_to_send.items():
+            for m in msgs:
+                # Reenviar solo si sigue pendiente
+                if m["status"] == "pending":
+                    self.send_message(username, other, m["text"])

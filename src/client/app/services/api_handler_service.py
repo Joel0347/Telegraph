@@ -35,6 +35,20 @@ class ApiHandlerService():
                 return []
         except Exception as e:
             publish_status({'message': f"Error inesperado {e}", 'status': 500})
+            return []
+
+    def get_online_users(self, username: str) -> list[dict]:
+        active_users = []
+        try:
+            all_users = self.get_users(username)
+            for u in all_users:
+                user_info = self.get_user_by_username(u)
+                if user_info and user_info.get("status") == "online":
+                    active_users.append(u)
+                    
+            return active_users
+        except Exception as e:
+            publish_status({'message': f"Error inesperado {e}", 'status': 500})
             
     def get_user_by_username(self, username: str) -> dict:
         try:

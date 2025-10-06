@@ -1,7 +1,7 @@
+# archivo listo para ser borrado si todo funciona
+
 import streamlit as st
-from streamlit.components.v1 import html
 from streamlit_autorefresh import st_autorefresh
-from sender import send_message
 from repositories.msg_repo import MessageRepository
 from services.msg_service import MessageService
 from services.api_handler_service import ApiHandlerService
@@ -98,6 +98,7 @@ def show_chat():
 
     _create_new_chat(username)
     
+# NUEVO
 def get_online_users(api_srv, username):
     active_users = []
     try:
@@ -144,12 +145,14 @@ def find_pending_mssgs_by_user(msg_srv, username, active_users):
     return pending_to_send
 
 def send_pending_mssgs(pending_to_send, username):
+    repo = MessageRepository()
+    service = MessageService(repo)
     # --- NUEVO: Enviar mensajes pendientes uno a uno ---
     for other, msgs in pending_to_send.items():
         for m in msgs:
             # Reenviar solo si sigue pendiente
             if m["status"] == "pending":
-                send_message(username, other, m["text"])
+                service.send_message(username, other, m["text"])
    
 def _render_chat_area(username):
     msg_repo = MessageRepository()
@@ -204,7 +207,7 @@ def _render_chat_area(username):
     )
     # send_btn = st.form_submit_button("Enviar")
     if new_msg:
-        result = send_message(username, st.session_state.selected_chat, new_msg)
+        result = msg_srv.send_message(username, st.session_state.selected_chat, new_msg)
         st.success(result)
         st.session_state.msg_input_key += 1
         st.rerun()
