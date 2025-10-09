@@ -1,9 +1,6 @@
 import streamlit as st
 import threading, os
 from server import start_flask_server
-from show_login import show_login
-from show_register import show_register
-from show_chat import show_chat
 from services.api_handler_service import ApiHandlerService
 from services.client_info_service import ClientInfoService
 from components.auth import AuthModule
@@ -11,7 +8,7 @@ from components.chat import ChatModule
 from PIL import Image
 
 # Cargar logo para favicon
-logo_path = "static/logo_no_bg.ico"
+logo_path = "static/images/logo_no_bg.ico"
 logo_img = None
 try:
     logo_img = Image.open(os.path.join(os.path.dirname(__file__), logo_path))
@@ -42,11 +39,8 @@ if username := client_srv.get_username():
     st.session_state.page = "chat"
 
 if st.session_state.page == "login":
-    # show_login()
     auth_module.show(action="login")
 elif st.session_state.page == "register":
-    # show_register()
     auth_module.show(action="register")
 elif st.session_state.page == "chat":
-    # show_chat()
     chat_module.show()

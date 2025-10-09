@@ -99,3 +99,23 @@ class MessageRepository:
                     self._write_all(path, raw)
         return changed
 
+    def update_message_status(self, user_id: str, other: str, timestamp: str, new_status: str) -> bool:
+        """
+        Actualiza el campo 'status' de un mensaje específico en el historial de user_id
+        contra 'other', identificado por su timestamp.
+        
+        Retorna True si se actualizó, False si no se encontró.
+        """
+        path = self._path_for(user_id)
+        updated = False
+        with self._lock:
+            raw = self._read_all(path)
+            if other in raw and isinstance(raw[other], list):
+                for m in raw[other]:
+                    if m.get("timestamp") == timestamp:
+                        m["status"] = new_status
+                        updated = True
+                        break
+                if updated:
+                    self._write_all(path, raw)
+        return updated

@@ -1,0 +1,33 @@
+.box-sent {
+    text-align:right;
+}
+
+.sent {
+    display:inline-block;
+    background-color:#2e7d32;
+    color:white;
+    padding:10px;
+    border-radius:10px;
+    max-width:70%;
+    box-shadow:0px 2px 5px rgba(0,0,0,0.2);
+    text-align:left;
+}
+
+.metadata {
+    font-size:10px;
+    color:#cfcfcf;
+    display:block;
+    text-align:right;
+}
+
+.icon {
+    font-size:14px;
+}
+
+.read {
+    color: #00CFFF;
+}
+
+.unread {
+    color: #cfcfcf
+}

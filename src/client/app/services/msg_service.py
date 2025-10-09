@@ -36,6 +36,12 @@ class MessageService:
         else:
             self.repo.append_message(receiver, sender, msg)    
         return msg
+    
+    def update_msg_status(
+            self, sender: str, receiver: str,
+            timestamp: str, status: Literal["ok", "pending"]
+        ):
+        return self.repo.update_message_status(sender, receiver, timestamp, status)
 
     def load_conversations(self, user: str) -> Dict[str, List[Message]]:
         return self.repo.load(user)
@@ -59,7 +65,7 @@ class MessageService:
         except Exception:
             return False
     
-    def send_message(self, sender: str, receiver: str, text: str):
+    def send_message(self, sender: str, receiver: str, text: str, timestamp: str = None, retried=False):
         user = self.api_srv.get_user_by_username(receiver)
         status = "ok" if user["status"] == "online" else "pending"
         
@@ -74,8 +80,11 @@ class MessageService:
             except Exception as e:
                 status = "pending"
                 print(f"Error enviando mensaje a {receiver}: {e}")
-    
-        self.save_message(sender, receiver, text, status, sent=True)
+
+        if not retried:
+            self.save_message(sender, receiver, text, status, sent=True)
+        else:
+            self.update_msg_status(sender, receiver, timestamp, status)
 
     def mark_as_read(self, user: str, from_user: str) -> int:
         changed = self.repo.mark_messages_from_as_read(user, from_user)
@@ -138,4 +147,4 @@ class MessageService:
             for m in msgs:
                 # Reenviar solo si sigue pendiente
                 if m["status"] == "pending":
-                    self.send_message(username, other, m["text"])
+                    self.send_message(username, other, m["text"], m['timestamp'], retried=True)
