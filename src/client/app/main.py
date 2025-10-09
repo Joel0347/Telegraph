@@ -1,6 +1,7 @@
 import streamlit as st
 import threading, os
 from server import start_flask_server
+from background_tasks import background_tasks
 from services.api_handler_service import ApiHandlerService
 from services.client_info_service import ClientInfoService
 from components.auth import AuthModule
@@ -47,4 +48,11 @@ if st.session_state.page == "login":
 elif st.session_state.page == "register":
     auth_module.show(action="register")
 elif st.session_state.page == "chat":
+    if "bg_tasks" not in st.session_state:
+        threading.Thread(
+            target=background_tasks,
+            args=(username, api_srv, chat_module.msg_srv),
+            daemon=True
+        ).start()
+        st.session_state.bg_tasks = True
     chat_module.show()

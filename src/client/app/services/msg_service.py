@@ -24,12 +24,8 @@ class MessageService:
         status: Literal["ok", "pending"], sent: bool
     ) -> Message:
         msg = Message(
-            from_=sender,
-            to=receiver,
-            text=text,
-            timestamp=datetime.utcnow(),
-            read=False,
-            status=status
+            from_=sender, to=receiver, text=text,
+            timestamp=datetime.utcnow(), read=False, status=status
         )
         
         if sent:
@@ -54,8 +50,10 @@ class MessageService:
 
     def _notify_read_receipt(self, sender: str, receiver: str) -> bool:
         ip, port = self.api_srv.get_peer_address(sender)
-        if not ip or not port:
+        
+        if not ip or not port or not self.api_srv.check_is_active(sender):
             return False
+        
         try:
             url = f"http://{ip}:{port}/notify_read"
             payload = {"from": receiver, "to": sender}
@@ -63,20 +61,31 @@ class MessageService:
             return r.status_code == 200
         except Exception:
             return False
+    
+    def retry_unsynchronized_receipts(self, user: str):
+        """
+        Reintenta enviar recibos de lectura a los grupos desincronizados del usuario.
+        """
+        unsynced = self.repo.get_unsynchronized_groups(user)
+        for from_user in unsynced:
+            if self.api_srv.check_is_active(from_user):
+                success = self._notify_read_receipt(from_user, user)
+                if success:
+                    self.repo.set_group_synchronized(user, from_user, synchronized=True)
 
     def send_message(
         self, sender: str, receiver: str, text: str,
         timestamp: Optional[str] = None, retried: bool = False
     ):
-        user = self.api_srv.get_user_by_username(receiver)
-        status: Literal["ok", "pending"] = "ok" if user["status"] == "online" else "pending"
+        active = self.api_srv.check_is_active(receiver)
+        status: Literal["ok", "pending"] = "ok" if active else "pending"
 
         if status == "ok":
             ip, port = self.api_srv.get_peer_address(receiver)
             url = f"http://{ip}:{port}/receive_message"
             payload = {"from": sender, "to": receiver, "text": text}
             try:
-                r = requests.post(url, json=payload, timeout=3)
+                r = requests.post(url, json=payload, timeout=2)
                 r.raise_for_status()
                 print(f"Mensaje enviado a {receiver}")
             except Exception as e:
@@ -91,7 +100,8 @@ class MessageService:
     def mark_as_read(self, user: str, from_user: str) -> int:
         changed = self.repo.mark_messages_from_as_read(user, from_user)
         if changed:
-            self._notify_read_receipt(from_user, user)
+            success = self._notify_read_receipt(from_user, user)
+            self.repo.set_group_synchronized(user, from_user, synchronized=success)
         return changed
 
     def mark_sent_messages_as_read(self, user: str, to_user: str) -> int:

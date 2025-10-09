@@ -55,6 +55,29 @@ class MessageRepository:
         with self._lock:
             self._write_all(path, groups)
 
+    def set_group_synchronized(self, user_id: str, other: str, synchronized: bool):
+        """
+        Actualiza el campo 'synchronized' del grupo con 'other' en el archivo de user_id.
+        """
+        path = self._path_for(user_id)
+        with self._lock:
+            groups = self._read_all(path)
+            for g in groups:
+                if g.name == other:
+                    g.synchronized = synchronized
+                    break
+            self._write_all(path, groups)
+            
+    def get_unsynchronized_groups(self, user_id: str) -> List[str]:
+        """
+        Devuelve los nombres de los grupos que están marcados como no sincronizados.
+        """
+        path = self._path_for(user_id)
+        with self._lock:
+            groups = self._read_all(path)
+            return [g.name for g in groups if not g.synchronized]
+
+
     def append_message(self, user_id: str, other: str, message: Message):
         """
         Añade un mensaje al grupo correspondiente (crea el grupo si no existe).
