@@ -3,6 +3,7 @@ from services.auth_service import AuthService
 from repositories.user_repo import UserRepository
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta
+from requests.exceptions import RequestException, ConnectionError
 import requests
 
 
@@ -76,17 +77,30 @@ def heartbeat():
         return jsonify({"message": "heartbeat recibido", "status": 200})
     except Exception as e:
         return jsonify({"message": str(e), "status": 500})
+    
+@app.route("/users/active/<username>", methods=["GET"])
+def is_user_active(username: str):
+    msg = auth_service.get_user_by_username(username)
+    
+    if msg["status"] == 500:
+        return jsonify(msg)
+    
+    return jsonify({"message": msg["message"]["status"], "status": 200})
+
 
 # --- Job en background ---
 def check_inactive_users():
-    now = datetime.now()
-    timeout = timedelta(seconds=30)  # tolerancia 1 minuto
-    users = auth_service.list_all()
-    for u in users:
-        if u.last_seen and (now - u.last_seen) > timeout and u.status != "offline":
-            auth_service.update_status(u.username, "offline")
-            requests.post(f"http://{u.ip}:{u.port}/disconnect")
-            app.logger.info(f"Usuario {u.username} marcado como offline por inactividad")
+    try:
+        now = datetime.now()
+        timeout = timedelta(seconds=30)  # tolerancia 1 minuto
+        users = auth_service.list_all()
+        for u in users:
+            if u.last_seen and (now - u.last_seen) > timeout and u.status != "offline":
+                auth_service.update_status(u.username, "offline")
+                requests.post(f"http://{u.ip}:{u.port}/disconnect")
+                app.logger.info(f"Usuario {u.username} marcado como offline por inactividad")
+    except (Exception, ConnectionError, RequestException):
+        app.logger.info(f"Usuario {u.username} ya está desconectado")
             
 # --- Inicializar scheduler ---
 scheduler = BackgroundScheduler()
