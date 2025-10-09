@@ -34,7 +34,7 @@ class ChatModule(UIModule):
             st.rerun()
 
         st.sidebar.title("Chats")
-        chat_partners = list(user_chats.keys())
+        chat_partners = [g.name for g in user_chats]
 
         # Obtener usuarios online
         online_set = set(online_users) if online_users else set()
@@ -42,7 +42,9 @@ class ChatModule(UIModule):
         # Construir lista de info para la sidebar
         sidebar_items = []
         for partner in chat_partners:
-            msgs = user_chats[partner]
+            group = next((g for g in user_chats if g.name == partner), None)
+            msgs = group.messages if group else []
+
             # Si los mensajes son objetos Message, acceder con .text
             if msgs:
                 last = msgs[-1]
@@ -112,14 +114,14 @@ class ChatModule(UIModule):
 
         with chat_box:
             for msg in chat_msgs:
-                if msg["from"] == username:
+                if msg.from_ == username:
                     inject_css("sent_msg.css")
                     html_preview = render_html_template(
                         "sent_msg.html",
-                        read="✓" if msg.get("read") else "◴",
-                        msg=msg['text'],
-                        status="read" if msg.get("read") else "unread",
-                        ts=msg.get("timestamp", "")
+                        read="✓" if msg.read else "◴",
+                        msg=msg.text,
+                        status="read" if msg.read else "unread",
+                        ts=str(msg.timestamp)
                     )
 
                     st.markdown(html_preview, unsafe_allow_html=True)
@@ -128,8 +130,8 @@ class ChatModule(UIModule):
                     inject_css("received_msg.css")
                     html_preview = render_html_template(
                         "received_msg.html",
-                        msg=msg['text'],
-                        ts=msg.get("timestamp", "")
+                        msg=msg.text,
+                        ts=str(msg.timestamp)
                     )
 
                     st.markdown(html_preview, unsafe_allow_html=True)
@@ -145,7 +147,7 @@ class ChatModule(UIModule):
         )
 
         if new_msg:
-            result = self.msg_srv.send_message(username, st.session_state.selected_chat, new_msg)
+            self.msg_srv.send_message(username, st.session_state.selected_chat, new_msg)
             st.session_state.msg_input_key += 1
             st.rerun()
 
