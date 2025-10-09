@@ -133,7 +133,7 @@ class AuthService:
     def list_all(self) -> list[User]:
         return self.repo.list_all()
     
-    def get_user_by_username(self, username: str) -> User:
+    def get_user_by_username(self, username: str) -> dict:
         try:
             user = self.repo.find_by_username(username)
             return {"message": user.model_dump(mode="json"), "status": 200}

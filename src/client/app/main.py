@@ -35,6 +35,9 @@ auth_module = AuthModule(api_srv, client_srv)
 chat_module = ChatModule(api_srv, client_srv)
 
 if username := client_srv.get_username():
+    if not api_srv.check_is_active(username):
+        client_srv.remove_username()
+        st.rerun()
     api_srv.notify_online(username)
     st.session_state.page = "chat"
 

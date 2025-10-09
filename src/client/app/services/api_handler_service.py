@@ -68,6 +68,18 @@ class ApiHandlerService():
             publish_status(res.json())
         except Exception as e:
             publish_status({'message': f"Error inesperado {e}", 'status': 500})
+    
+    def check_is_active(self, username: str) -> bool:
+        try:
+            res = requests.get(f"{self.api_url}/users/active/{username}")
+            publish_status(res.json())
+            
+            if res.json()["status"] == 200:
+                return res.json()["message"] == "online"
+            return False
+        except Exception as e:
+            publish_status({'message': f"Error inesperado {e}", 'status': 500})
+            return False
         
     def send_heart_beat(self, username: str):
         try:
