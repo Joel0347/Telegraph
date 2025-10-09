@@ -18,15 +18,11 @@ class ChatModule(UIModule):
     def show(self):
         username = self.client_srv.get_username()
         
-        st_autorefresh(interval=2000, key="chat_autorefresh")
-        self.api_srv.send_heart_beat(username)
+        st_autorefresh(interval=4000, key="chat_autorefresh")
         user_chats = self.msg_srv.load_conversations(username)
+        self.api_srv.send_heart_beat(username)
         online_users = self.api_srv.get_online_users(username)
 
-        if online_users:
-            pending_mssgs_by_user = self.msg_srv.find_pending_mssgs_by_user(username, online_users)
-            self.msg_srv.send_pending_mssgs(pending_mssgs_by_user, username)
-        
         if st.sidebar.button("Cerrar Sesión", type='primary'):
             self.api_srv.logout(username)
             st.session_state.page = "login"
