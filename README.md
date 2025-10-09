@@ -1,5 +1,5 @@
 <div style="text-align:center">
-  <img src="src/client/app/static/logo_no_bg.png" alt="Telegraph" style="width:600px; margin-bottom:0px;">
+  <img src="src/client/app/static/images/logo_no_bg.png" alt="Telegraph" style="width:600px; margin-bottom:0px;">
   <div style="font-size:36px; font-weight:bold; margin-top:4px;">Telegraph</div>
 </div>
 

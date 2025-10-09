@@ -1,0 +1,18 @@
+.btn {
+    color:#222;
+    border-radius:8px;
+    border:none;
+    width:100%;
+    text-align:left;
+    padding:8px 6px;
+    margin-bottom:0px;
+    font-weight:bold;
+}
+
+.yes {
+    background-color: #e7fbe9;
+}
+
+.no {
+    background-color: #fff;
+}

@@ -14,7 +14,7 @@ class AuthModule(UIModule):
         page_title = "Inicio de Sesión" if action == "login" else "Registro"
         columns = st.columns(5)
         with columns[2]:
-            st.image("static/logo_no_bg.png", width=160)
+            st.image("static/images/logo_no_bg.png", width=160)
         
         st.title(f"Telegraph - {page_title}")
 

@@ -1,0 +1,20 @@
+.box-received {
+    text-align:left;
+}
+
+.received {
+    display:inline-block;
+    background-color:#424242;
+    color:white;
+    padding:10px;
+    border-radius:10px;
+    max-width:70%;
+    box-shadow:0px 2px 5px rgba(0,0,0,0.2);
+}
+
+.metadata {
+    font-size:10px;
+    color:#cfcfcf;
+    display:block;
+    text-align:right;
+}
