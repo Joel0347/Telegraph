@@ -13,7 +13,7 @@ class MessageGroup(BaseModel):
     }
     
     @model_validator(mode="after")
-    def set_default_synchronized(cls, values):
-        if values.synchronized is None:
-            values.synchronized = True
-        return values
+    def set_default_synchronized(self):
+        if self.synchronized is None:
+            self.synchronized = True
+        return self    

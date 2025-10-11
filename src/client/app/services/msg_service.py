@@ -49,13 +49,13 @@ class MessageService:
         return sorted(group.messages, key=lambda m: m.timestamp) if group else []
 
     def _notify_read_receipt(self, sender: str, receiver: str) -> bool:
-        ip, port = self.api_srv.get_peer_address(sender)
+        hostname, port = self.api_srv.get_peer_address(sender)
         
-        if not ip or not port or not self.api_srv.check_is_active(sender):
+        if not hostname or not port or not self.api_srv.check_is_active(sender):
             return False
         
         try:
-            url = f"http://{ip}:{port}/notify_read"
+            url = f"http://{hostname}:{port}/notify_read"
             payload = {"from": receiver, "to": sender}
             r = requests.post(url, json=payload, timeout=2)
             return r.status_code == 200
@@ -81,8 +81,8 @@ class MessageService:
         status: Literal["ok", "pending"] = "ok" if active else "pending"
 
         if status == "ok":
-            ip, port = self.api_srv.get_peer_address(receiver)
-            url = f"http://{ip}:{port}/receive_message"
+            hostname, port = self.api_srv.get_peer_address(receiver)
+            url = f"http://{hostname}:{port}/receive_message"
             payload = {"from": sender, "to": receiver, "text": text}
             try:
                 r = requests.post(url, json=payload, timeout=2)
