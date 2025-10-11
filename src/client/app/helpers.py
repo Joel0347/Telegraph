@@ -2,16 +2,12 @@ import socket, os
 import streamlit as st
 
 
-def get_local_ip() -> str:
-    _socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        _socket.connect(("8.8.8.8", 80))
-        ip = _socket.getsockname()[0]
-    except:
-        ip = "127.0.0.1"
-    finally:
-        _socket.close()
-    return ip
+def get_hostname() -> str:
+    """
+    Devuelve el hostname del contenedor/host actual.
+    En Docker, si usas --name o --hostname, aquí aparecerá ese valor.
+    """
+    return socket.gethostname()
 
 def get_local_port() -> int:
     return int(os.getenv("API_PORT", 8000))

@@ -18,7 +18,7 @@ def register():
     msg = auth_service.register_user(
         username=data.get("username", ""),
         password=data.get("password", ""),
-        ip=data.get("ip", ""),
+        hostname=data.get("hostname", ""),
         port=data.get("port", 0),
     )
     return jsonify(msg)
@@ -29,7 +29,7 @@ def login():
     msg = auth_service.login_user(
         username=data.get("username", ""),
         password=data.get("password", ""),
-        ip=data.get("ip", ""),
+        hostname=data.get("hostname", ""),
         port=data.get("port", 0),
     )
     return jsonify(msg)
@@ -97,7 +97,7 @@ def check_inactive_users():
         for u in users:
             if u.last_seen and (now - u.last_seen) > timeout and u.status != "offline":
                 auth_service.update_status(u.username, "offline")
-                requests.post(f"http://{u.ip}:{u.port}/disconnect")
+                requests.post(f"http://{u.hostname}:{u.port}/disconnect")
                 app.logger.info(f"Usuario {u.username} marcado como offline por inactividad")
     except (Exception, ConnectionError, RequestException):
         app.logger.info(f"Usuario {u.username} ya está desconectado")

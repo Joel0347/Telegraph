@@ -1,6 +1,6 @@
 import requests
 from typing import Optional, Literal
-from helpers import publish_status, get_local_ip, get_local_port
+from helpers import publish_status, get_hostname, get_local_port
 
 
 class ApiHandlerService():
@@ -20,7 +20,7 @@ class ApiHandlerService():
             peers = res.json().get("peers", [])
             peer = next((p for p in peers if p["username"] == username), None)
             if peer:
-                return peer.get("ip"), peer.get("port")
+                return peer.get("hostname"), peer.get("port")
         except Exception:
             return None
         return None
@@ -100,7 +100,7 @@ class ApiHandlerService():
             res = requests.post(f"{self.api_url}/{action}", json={
                 "username": username,
                 "password": pwd,
-                "ip": get_local_ip(),
+                "hostname": get_hostname(),
                 "port": get_local_port(),
                 "status": "online"
             })
