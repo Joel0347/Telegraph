@@ -12,7 +12,7 @@ The identity manager is the one who manage every account information, such as:
 
 - username
 - password encrypted
-- ip and port
+- hostname and port
 - status
 - last time seen online
 
@@ -110,14 +110,19 @@ docker build -t src-client:latest ./client
 
 2. Create a network
 ```bash
-docker network create network_name
+docker network create <network_name>
+```
+
+or if you are using swarm:
+```bash
+docker network create <network_name> --driver overlay --attachable
 ```
 
 3. Run Identity Manager Container
 ```bash
-docker run -d \
+docker run --rm \
   --name identity-manager \
-  --network network_name \
+  --network <network_name> \
   -v $(pwd)/identity-manager/app:/app \
   -v $(pwd)/volumes/identity-data:/data \
   -p 8100:8000 \
@@ -126,13 +131,13 @@ docker run -d \
 
 4. Create as many clients as you need
 ```bash
-docker run -d \
-  --name client_name \
-  --network network_name \
+docker run --rm \
+  --name <client_name> \
+  --network <network_name> \
   -v $(pwd)/client/app:/app \
-  -v $(pwd)/volumes/client_name-data:/data \
-  -p port_on_host:5000 \
-  -p port_on_host:8000 \
+  -v $(pwd)/volumes/<client_name>-data:/data \
+  -p <port_on_host>:5000 \
+  -p <port_on_host>:8000 \
   -e PORT=5000 \
   -e API_PORT=8000 \
   src-client:latest
@@ -140,5 +145,19 @@ docker run -d \
 
 5. Remove containers (optional)
 ```bash
-docker rm -f container_name
+docker rm -f <container_name>
 ```
+
+### Create connection using Swarm
+
+1. Initialize Swarm
+```bash
+docker swarm init --advertise-addr <IP_ADDR>
+```
+
+2. Get manager token
+```bash
+docker swarm join-token manager
+```
+
+3. Copy the command given and paste it in the other computer
