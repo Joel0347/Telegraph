@@ -110,3 +110,14 @@ class ApiHandlerService():
         except Exception as e:
             publish_status({'message': f"Error inesperado: {e}", 'status': 500})
             return False
+        
+    def update_hostname(self, username: str):
+        try:
+            current_hostname = get_hostname()
+            saved_hostname = self.get_peer_address(username)
+
+            if current_hostname != saved_hostname:
+                res = requests.put(f"{self.api_url}/users/reconnect/{current_hostname}/{username}")
+                publish_status(res.json())
+        except Exception as e:
+            publish_status({'message': f"Error inesperado: {e}", 'status': 500})

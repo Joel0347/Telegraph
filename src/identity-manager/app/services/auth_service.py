@@ -106,6 +106,17 @@ class AuthService:
             return {"message": 'Estado actualizado exitosamente', "status": 200}
         except Exception as e:
             return {"message": str(e), "status": 500}
+    
+    def update_hostname(self, username: str, hostname: str):
+        try:
+            user = self.repo.find_by_username(username)
+            if not user:
+                return {"message": "El usuario no existe", "status": 500}
+            user.hostname = hostname
+            self.repo.update_user(user)
+            return {"message": 'Hostname actualizado exitosamente', "status": 200}
+        except Exception as e:
+            return {"message": str(e), "status": 500}
         
     def update_last_seen(self, username: str):
         try:
