@@ -47,6 +47,9 @@ if st.session_state.page == "login":
     auth_module.show(action="login")
 elif st.session_state.page == "register":
     auth_module.show(action="register")
+elif st.session_state.page == "chat" and not username:
+    st.session_state.page = "login"
+    st.rerun()
 elif st.session_state.page == "chat":
     if "bg_tasks" not in st.session_state:
         threading.Thread(

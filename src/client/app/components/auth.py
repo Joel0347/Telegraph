@@ -11,6 +11,7 @@ class AuthModule(UIModule):
         self.client_service = client_service
 
     def show(self, action: Literal["login", "register"]):
+        st.session_state.selected_chat = None
         page_title = "Inicio de Sesión" if action == "login" else "Registro"
         columns = st.columns(5)
         with columns[2]:
