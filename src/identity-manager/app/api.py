@@ -87,12 +87,17 @@ def is_user_active(username: str):
     
     return jsonify({"message": msg["message"]["status"], "status": 200})
 
+@app.route("/users/reconnect/<hostname>/<username>", methods=["PUT"])
+def update_hostname(hostname: str, username: str):
+    msg = auth_service.update_hostname(username, hostname)
+    return jsonify(msg)
+
 
 # --- Job en background ---
 def check_inactive_users():
     try:
         now = datetime.now()
-        timeout = timedelta(seconds=30)  # tolerancia 1 minuto
+        timeout = timedelta(seconds=30)  # tolerancia 30 seg
         users = auth_service.list_all()
         for u in users:
             if u.last_seen and (now - u.last_seen) > timeout and u.status != "offline":
