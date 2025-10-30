@@ -6,7 +6,7 @@ def background_tasks(username: str, api_srv: ApiHandlerService, msg_srv: Message
     try:
         msg_srv.retry_unsynchronized_receipts(username)
         online_users = api_srv.get_online_users(username)
-        api_srv.update_hostname(username)
+        api_srv.update_ip_address(username)
         if online_users:
             pending_mssgs_by_user = msg_srv.find_pending_mssgs_by_user(username, online_users)
             msg_srv.send_pending_mssgs(pending_mssgs_by_user, username)

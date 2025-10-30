@@ -6,7 +6,7 @@ from datetime import datetime
 class User(BaseModel):
     username: str = Field(..., min_length=1)
     password: str = Field(..., min_length=1)
-    hostname: str | None = None
+    ip: str | None = None
     port: Annotated[int, Field(ge=0, le=65535)] | None = None
     status: Literal["online", "offline"]
     last_seen: datetime | None = None

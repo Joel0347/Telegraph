@@ -4,7 +4,8 @@ from repositories.user_repo import UserRepository
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta
 from requests.exceptions import RequestException, ConnectionError
-import requests
+import requests, threading
+from udp_discovery import run_server
 
 
 app = Flask(__name__)
@@ -18,7 +19,7 @@ def register():
     msg = auth_service.register_user(
         username=data.get("username", ""),
         password=data.get("password", ""),
-        hostname=data.get("hostname", ""),
+        ip=data.get("ip", ""),
         port=data.get("port", 0),
     )
     return jsonify(msg)
@@ -29,7 +30,7 @@ def login():
     msg = auth_service.login_user(
         username=data.get("username", ""),
         password=data.get("password", ""),
-        hostname=data.get("hostname", ""),
+        ip=data.get("ip", ""),
         port=data.get("port", 0),
     )
     return jsonify(msg)
@@ -87,9 +88,9 @@ def is_user_active(username: str):
     
     return jsonify({"message": msg["message"]["status"], "status": 200})
 
-@app.route("/users/reconnect/<hostname>/<username>", methods=["PUT"])
-def update_hostname(hostname: str, username: str):
-    msg = auth_service.update_hostname(username, hostname)
+@app.route("/users/reconnect/<ip>/<username>", methods=["PUT"])
+def update_ip_address(ip: str, username: str):
+    msg = auth_service.update_ip_address(username, ip)
     return jsonify(msg)
 
 
@@ -102,7 +103,7 @@ def check_inactive_users():
         for u in users:
             if u.last_seen and (now - u.last_seen) > timeout and u.status != "offline":
                 auth_service.update_status(u.username, "offline")
-                requests.post(f"http://{u.hostname}:{u.port}/disconnect")
+                requests.post(f"http://{u.ip}:{u.port}/disconnect")
                 app.logger.info(f"Usuario {u.username} marcado como offline por inactividad")
     except (Exception, ConnectionError, RequestException):
         app.logger.info(f"Usuario {u.username} ya está desconectado")
@@ -114,4 +115,7 @@ scheduler.start()
 
 
 if __name__ == "__main__":
+    # lanzar el servidor UDP en un hilo
+    t = threading.Thread(target=run_server, daemon=True)
+    t.start()
     app.run(host="0.0.0.0", port=8000)

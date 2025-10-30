@@ -1,13 +1,29 @@
-import socket, os
+import socket, os, fcntl, struct, ipaddress
 import streamlit as st
 
 
-def get_hostname() -> str:
-    """
-    Devuelve el hostname del contenedor/host actual.
-    En Docker, si usas --name o --hostname, aquí aparecerá ese valor.
-    """
-    return socket.gethostname()
+def get_local_ip(s: socket.socket = None, ifname="eth0") -> str:
+    # obtiene la IP overlay del contenedor
+    if not s:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    ip = socket.inet_ntoa(fcntl.ioctl(
+        s.fileno(),
+        0x8915,  # SIOCGIFADDR
+        struct.pack('256s', ifname[:15].encode())
+    )[20:24])
+
+    return ip
+
+def get_network_broadcast(ifname="eth0") -> str:
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    ip = get_local_ip(s, ifname)
+    netmask = socket.inet_ntoa(fcntl.ioctl(
+        s.fileno(),
+        0x891b,  # SIOCGIFNETMASK
+        struct.pack('256s', ifname[:15].encode())
+    )[20:24])
+    net = ipaddress.ip_network(f"{ip}/{netmask}", strict=False)
+    return str(net.broadcast_address)
 
 def get_local_port() -> int:
     return int(os.getenv("API_PORT", 8000))

@@ -1,17 +1,31 @@
-import requests
+import requests, os , json, socket
 from typing import Optional, Literal
-from helpers import publish_status, get_hostname, get_local_port
+from helpers import publish_status, get_local_ip, get_local_port, get_network_broadcast
 
 
 class ApiHandlerService():
     _instance = None
     api_url: str = None
     
-    def __new__(cls, api_url="http://identity-manager:8000"):
+    def __new__(cls):
         if cls._instance is None:
             cls._instance = super(ApiHandlerService, cls).__new__(cls)
-            cls._instance.api_url = api_url
+            cls._instance.discover_manager()
         return cls._instance
+    
+    def discover_manager(self):
+        dns_port = int(os.getenv("DNS_PORT", "5353"))
+        broadcast_ip = get_network_broadcast()
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+
+        msg = {"action": "discover"}
+        sock.sendto(json.dumps(msg).encode(), (broadcast_ip, dns_port))
+
+        data, _ = sock.recvfrom(1024)
+        response = json.loads(data.decode())
+        self.api_url = f"http://{response['ip']}:{int(response['port'])}"
     
     def get_peer_address(self, username: str) -> Optional[tuple]:
         try:
@@ -20,7 +34,7 @@ class ApiHandlerService():
             peers = res.json().get("peers", [])
             peer = next((p for p in peers if p["username"] == username), None)
             if peer:
-                return peer.get("hostname"), peer.get("port")
+                return peer.get("ip"), peer.get("port")
         except Exception:
             return None
         return None
@@ -100,7 +114,7 @@ class ApiHandlerService():
             res = requests.post(f"{self.api_url}/{action}", json={
                 "username": username,
                 "password": pwd,
-                "hostname": get_hostname(),
+                "ip": get_local_ip(),
                 "port": get_local_port(),
                 "status": "online"
             })
@@ -111,13 +125,13 @@ class ApiHandlerService():
             publish_status({'message': f"Error inesperado: {e}", 'status': 500})
             return False
         
-    def update_hostname(self, username: str):
+    def update_ip_address(self, username: str):
         try:
-            current_hostname = get_hostname()
-            saved_hostname = self.get_peer_address(username)
+            current_addr = get_local_ip()
+            saved_addr = self.get_peer_address(username)
 
-            if current_hostname != saved_hostname:
-                res = requests.put(f"{self.api_url}/users/reconnect/{current_hostname}/{username}")
+            if current_addr != saved_addr:
+                res = requests.put(f"{self.api_url}/users/reconnect/{current_addr}/{username}")
                 publish_status(res.json())
         except Exception as e:
             publish_status({'message': f"Error inesperado: {e}", 'status': 500})

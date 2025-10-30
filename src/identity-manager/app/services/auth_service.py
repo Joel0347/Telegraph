@@ -43,7 +43,7 @@ class AuthService:
         """
         return checkpw(plain_pwd.encode('utf-8'), hashed_pwd.encode('utf-8'))
 
-    def register_user(self, username: str, password: str, hostname: str = "", port: int = 0) -> Tuple[bool, str]:
+    def register_user(self, username: str, password: str, ip: str = "", port: int = 0) -> Tuple[bool, str]:
         try:
             if not username or not password:
                 return {"message": "Faltan datos", "status": 400}
@@ -56,7 +56,7 @@ class AuthService:
                 }
 
             user = User(
-                username=username, hostname=hostname, port=port, status="online",
+                username=username, ip=ip, port=port, status="online",
                 password=AuthService.hash_password(password),
                 last_seen=datetime.now()
             )
@@ -71,7 +71,7 @@ class AuthService:
             return {"message": str(e), "status": 500}
         
 
-    def login_user(self, username, password, hostname="", port=0)-> Tuple[bool, str]:
+    def login_user(self, username, password, ip="", port=0)-> Tuple[bool, str]:
         try:
             user = self.repo.find_by_username(username)
 
@@ -87,7 +87,7 @@ class AuthService:
                     "status": 403
                 }
             
-            user.hostname = hostname
+            user.ip = ip
             user.port = port
             user.status = "online"
             user.last_seen = datetime.now()
@@ -107,14 +107,14 @@ class AuthService:
         except Exception as e:
             return {"message": str(e), "status": 500}
     
-    def update_hostname(self, username: str, hostname: str):
+    def update_ip_address(self, username: str, ip: str):
         try:
             user = self.repo.find_by_username(username)
             if not user:
                 return {"message": "El usuario no existe", "status": 500}
-            user.hostname = hostname
+            user.ip = ip
             self.repo.update_user(user)
-            return {"message": 'Hostname actualizado exitosamente', "status": 200}
+            return {"message": 'IP actualizada exitosamente', "status": 200}
         except Exception as e:
             return {"message": str(e), "status": 500}
         
@@ -133,8 +133,8 @@ class AuthService:
     def get_peers(self) -> list[dict]:
         users = self.repo.list_all()
         return [
-            {"username": u.username, "hostname": u.hostname, "port": u.port}
-            for u in users if u.hostname and u.port
+            {"username": u.username, "ip": u.ip, "port": u.port}
+            for u in users if u.ip and u.port
         ]
 
     def list_usernames(self) -> list[dict]:
