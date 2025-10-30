@@ -12,7 +12,7 @@ The identity manager is the one who manage every account information, such as:
 
 - username
 - password encrypted
-- hostname and port
+- ip and port
 - status
 - last time seen online
 
@@ -126,6 +126,7 @@ docker run --rm \
   -v $(pwd)/identity-manager/app:/app \
   -v $(pwd)/volumes/identity-data:/data \
   -p 8100:8000 \
+  -e DNS_PORT=5353 \
   src-identity-manager:latest
 ```
 
@@ -140,6 +141,7 @@ docker run --rm \
   -p <port_on_host>:8000 \
   -e PORT=5000 \
   -e API_PORT=8000 \
+  -e DNS_PORT=5353 \
   src-client:latest
 ```
 

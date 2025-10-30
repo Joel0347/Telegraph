@@ -7,6 +7,8 @@ services:
       - ./volumes/identity-data:/data
     ports:
       - "8100:8000"
+    environment:
+      - DNS_PORT=5353
     networks:
       - telegraph-net
 
@@ -28,6 +30,7 @@ services:
     environment:
       - PORT=5000
       - API_PORT=8000
+      - DNS_PORT=5353
     networks:
       - telegraph-net
 
@@ -44,6 +47,7 @@ services:
     environment:
       - PORT=5000
       - API_PORT=8000
+      - DNS_PORT=5353
     networks:
       - telegraph-net
 
@@ -60,6 +64,7 @@ services:
     environment:
       - PORT=5000
       - API_PORT=8000
+      - DNS_PORT=5353
     networks:
       - telegraph-net
 
