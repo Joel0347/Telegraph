@@ -1,0 +1,74 @@
+services:
+  identity-manager-1:
+    image: src-identity-manager:latest
+    volumes:
+      - ./app:/app
+      - ../volumes/identity1-data:/data
+    ports:
+      - "8100:8000"
+    environment:
+      - DNS_PORT=5353
+    networks:
+      ws:
+        aliases:
+          - identity-manager
+  
+  identity-manager-2:
+    image: src-identity-manager:latest
+    volumes:
+      - ./app:/app
+      - ../volumes/identity2-data:/data
+    ports:
+      - "8101:8000"
+    environment:
+      - DNS_PORT=5353
+    networks:
+      ws:
+        aliases:
+          - identity-manager
+
+  identity-manager-3:
+    image: src-identity-manager:latest
+    volumes:
+      - ./app:/app
+      - ../volumes/identity3-data:/data
+    ports:
+      - "8102:8000"
+    environment:
+      - DNS_PORT=5353
+    networks:
+      ws:
+        aliases:
+          - identity-manager
+
+  identity-manager-4:
+    image: src-identity-manager:latest
+    volumes:
+      - ./app:/app
+      - ../volumes/identity4-data:/data
+    ports:
+      - "8103:8000"
+    environment:
+      - DNS_PORT=5353
+    networks:
+      ws:
+        aliases:
+          - identity-manager
+
+  identity-manager-5:
+    image: src-identity-manager:latest
+    volumes:
+      - ./app:/app
+      - ../volumes/identity5-data:/data
+    ports:
+      - "8104:8000"
+    environment:
+      - DNS_PORT=5353
+    networks:
+      ws:
+        aliases:
+          - identity-manager
+
+networks:
+  ws:
+    external: true

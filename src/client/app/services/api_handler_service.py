@@ -56,6 +56,7 @@ class ApiHandlerService():
                 )
                 res.raise_for_status()
             except Exception as e:
+                ## comentar esta linea para no mostrar los managers caidos
                 publish_status({'message': f"Error con {base_url}: {e}", 'status': 500})
                 continue
         return res
