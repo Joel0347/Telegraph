@@ -1,36 +1,71 @@
-import requests, os , json, socket
+import requests, os, json, socket
 from typing import Optional, Literal
-from helpers import publish_status, get_local_ip, get_local_port, get_network_broadcast
+from helpers import publish_status, get_local_ip, get_local_port, get_overlay_network
 
 
 class ApiHandlerService():
     _instance = None
-    api_url: str = None
+    api_urls: list[str] = None
     
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(ApiHandlerService, cls).__new__(cls)
-            cls._instance.discover_manager()
+            cls._instance._discover_managers()
         return cls._instance
     
-    def discover_manager(self):
+    def _discover_managers(self):
         dns_port = int(os.getenv("DNS_PORT", "5353"))
-        broadcast_ip = get_network_broadcast()
-
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-
+        sock.settimeout(0.2)
         msg = {"action": "discover"}
-        sock.sendto(json.dumps(msg).encode(), (broadcast_ip, dns_port))
+        net = get_overlay_network()
+        api_urls = set()
 
-        data, _ = sock.recvfrom(1024)
-        response = json.loads(data.decode())
-        self.api_url = f"http://{response['ip']}:{int(response['port'])}"
+        try:
+            # raise Exception()
+            infos = socket.getaddrinfo("identity-manager", None)
+            for info in infos:
+                ip = info[4][0]
+                api_urls.add(ip)
+        except Exception:
+            for ip in net.hosts():
+                try:
+                    sock.sendto(json.dumps(msg).encode(), (str(ip), dns_port))
+                    data, _ = sock.recvfrom(1024)
+                    response = json.loads(data.decode())
+
+                    if response.get("status") == "active":
+                        api_urls.add(str(ip))
+                except Exception as e:
+                    continue
+
+        self.api_urls = list(api_urls)
+    
+    def _request_all(self, method: str, path: str, **kwargs):
+        """
+        Helper que intenta la petición en todas las URLs de managers.
+        Retorna la primera respuesta exitosa, o None si todas fallan.
+        """
+        res = None
+        api_port = int(os.getenv("API_PORT", "8000"))
+        for base_url in self.api_urls:
+            try:
+                res = requests.request(
+                    method, f"http://{base_url}:{api_port}{path}",
+                    timeout=2, **kwargs
+                )
+                res.raise_for_status()
+            except Exception as e:
+                publish_status({'message': f"Error con {base_url}: {e}", 'status': 500})
+                continue
+        return res
+
     
     def get_peer_address(self, username: str) -> Optional[tuple]:
         try:
-            res = requests.get(f"{self.api_url}/peers", timeout=2)
-            res.raise_for_status()
+            # res = requests.get(f"{self.api_urls}/peers", timeout=2)
+            res = self._request_all("GET", "/peers")
+            # res.raise_for_status()
             peers = res.json().get("peers", [])
             peer = next((p for p in peers if p["username"] == username), None)
             if peer:
@@ -41,11 +76,12 @@ class ApiHandlerService():
     
     def get_users(self, username: str) -> list[dict]:
         try:
-            res = requests.get(f"{self.api_url}/users")
+            # res = requests.get(f"{self.api_urls}/users")
+            res = self._request_all("GET", "/users")
             if res.json()["status"] == 200:
                 return [u["username"] for u in res.json()['usernames'] if u["username"] != username]
             else:
-                publish_status(res.json())
+                # publish_status(res.json())
                 return []
         except Exception as e:
             publish_status({'message': f"Error inesperado {e}", 'status': 500})
@@ -66,11 +102,12 @@ class ApiHandlerService():
             
     def get_user_by_username(self, username: str) -> dict:
         try:
-            res = requests.get(f"{self.api_url}/users/{username}")
+            res = self._request_all("GET", f"/users/{username}")
+            # res = requests.get(f"{self.api_urls}/users/{username}")
             if res.json()["status"] == 200:
                 return res.json()["message"]
             else:
-                publish_status(res.json())
+                # publish_status(res.json())
                 return {}
         except Exception as e:
             publish_status({'message': f"Error inesperado {e}", 'status': 500})
@@ -78,15 +115,17 @@ class ApiHandlerService():
         
     def notify_online(self, username: str):
         try:
-            res = requests.get(f"{self.api_url}/users/{username}")
-            publish_status(res.json())
+            # res = requests.get(f"{self.api_urls}/users/{username}")
+            self._request_all("GET", f"/users/{username}")
+            # publish_status(res.json())
         except Exception as e:
             publish_status({'message': f"Error inesperado {e}", 'status': 500})
     
     def check_is_active(self, username: str) -> bool:
         try:
-            res = requests.get(f"{self.api_url}/users/active/{username}")
-            publish_status(res.json())
+            # res = requests.get(f"{self.api_urls}/users/active/{username}")
+            res = self._request_all("GET", f"/users/active/{username}")
+            # publish_status(res.json())
             
             if res.json()["status"] == 200:
                 return res.json()["message"] == "online"
@@ -96,29 +135,37 @@ class ApiHandlerService():
             return False
         
     def send_heart_beat(self, username: str):
-        try:
-            res = requests.post(f"{self.api_url}/heartbeat", json={"username": username})
-            publish_status(res.json())
-        except Exception as e:
-            publish_status({'message': f"Error inesperado {e}", 'status': 500})
+        # try:
+        self._request_all("POST", "/heartbeat", json={"username": username})
+            # publish_status(res.json())
+        # except Exception as e:
+        #     publish_status({'message': f"Error inesperado {e}", 'status': 500})
             
     def logout(self, username: str):
-        try:
-            res = requests.post(f"{self.api_url}/logout", json={"username": username})
-            publish_status(res.json())
-        except Exception as e:
-            publish_status({'message': f"Error inesperado: {e}", 'status': 500})
+        self._request_all("POST", "/logout", json={"username": username})
+        # try:
+        #     res = requests.post(f"{self.api_urls}/logout", json={"username": username})
+        #     publish_status(res.json())
+        # except Exception as e:
+        #     publish_status({'message': f"Error inesperado: {e}", 'status': 500})
             
     def login_register(self, username: str, pwd: str, action: Literal["login", "register"]) -> bool:
         try:
-            res = requests.post(f"{self.api_url}/{action}", json={
+            res = self._request_all("POST", f"/{action}", json={
                 "username": username,
                 "password": pwd,
                 "ip": get_local_ip(),
                 "port": get_local_port(),
                 "status": "online"
             })
-            publish_status(res.json())
+            # res = requests.post(f"{self.api_urls}/{action}", json={
+            #     "username": username,
+            #     "password": pwd,
+            #     "ip": get_local_ip(),
+            #     "port": get_local_port(),
+            #     "status": "online"
+            # })
+            # publish_status(res.json())
             
             return res.json()["status"] == 200
         except Exception as e:
@@ -131,7 +178,8 @@ class ApiHandlerService():
             saved_addr = self.get_peer_address(username)
 
             if current_addr != saved_addr:
-                res = requests.put(f"{self.api_url}/users/reconnect/{current_addr}/{username}")
-                publish_status(res.json())
+                self._request_all("PUT", f"/users/reconnect/{current_addr}/{username}")
+                # res = requests.put(f"{self.api_urls}/users/reconnect/{current_addr}/{username}")
+                # publish_status(res.json())
         except Exception as e:
             publish_status({'message': f"Error inesperado: {e}", 'status': 500})

@@ -43,7 +43,7 @@ class AuthService:
         """
         return checkpw(plain_pwd.encode('utf-8'), hashed_pwd.encode('utf-8'))
 
-    def register_user(self, username: str, password: str, ip: str = "", port: int = 0) -> Tuple[bool, str]:
+    def register_user(self, username: str, password: str, ip: str = "", port: int = 0) -> dict:
         try:
             if not username or not password:
                 return {"message": "Faltan datos", "status": 400}
@@ -71,7 +71,7 @@ class AuthService:
             return {"message": str(e), "status": 500}
         
 
-    def login_user(self, username, password, ip="", port=0)-> Tuple[bool, str]:
+    def login_user(self, username, password, ip="", port=0)-> dict:
         try:
             user = self.repo.find_by_username(username)
 

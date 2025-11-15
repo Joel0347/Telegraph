@@ -115,14 +115,20 @@ docker network create <network_name>
 
 or if you are using swarm:
 ```bash
-docker network create <network_name> --driver overlay --attachable
+docker network create \
+  --driver overlay \
+  --attachable \
+  --subnet 10.10.0.0/28 \
+  --gateway 10.10.0.1 \
+  <network_name>
 ```
 
 3. Run Identity Manager Container
 ```bash
 docker run --rm \
-  --name identity-manager \
+  --name identity-manager-<i> \
   --network <network_name> \
+  --network-alias identity-manager \
   -v $(pwd)/identity-manager/app:/app \
   -v $(pwd)/volumes/identity-data:/data \
   -p 8100:8000 \

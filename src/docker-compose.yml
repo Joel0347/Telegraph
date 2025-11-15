@@ -10,7 +10,9 @@ services:
     environment:
       - DNS_PORT=5353
     networks:
-      - telegraph-net
+      telegraph-net:
+        aliases:
+            - identity-manager
 
   client:
     build: "./client"
@@ -71,4 +73,7 @@ services:
 networks:
   telegraph-net:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.1.0/28
 
