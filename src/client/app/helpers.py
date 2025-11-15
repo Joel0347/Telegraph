@@ -14,16 +14,22 @@ def get_local_ip(s: socket.socket = None, ifname="eth0") -> str:
 
     return ip
 
-def get_network_broadcast(ifname="eth0") -> str:
+def get_overlay_network(ifname="eth0") -> ipaddress.IPv4Network:
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+    # IP local
     ip = get_local_ip(s, ifname)
+
+    # Netmask
     netmask = socket.inet_ntoa(fcntl.ioctl(
         s.fileno(),
         0x891b,  # SIOCGIFNETMASK
         struct.pack('256s', ifname[:15].encode())
     )[20:24])
+
+    # Construir red
     net = ipaddress.ip_network(f"{ip}/{netmask}", strict=False)
-    return str(net.broadcast_address)
+    return net
 
 def get_local_port() -> int:
     return int(os.getenv("API_PORT", 8000))

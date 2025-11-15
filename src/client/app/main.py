@@ -7,7 +7,6 @@ from services.client_info_service import ClientInfoService
 from components.auth import AuthModule
 from components.chat import ChatModule
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.interval import IntervalTrigger
 from PIL import Image
 
 # Cargar logo para favicon
@@ -55,13 +54,14 @@ elif st.session_state.page == "chat" and not username:
 elif st.session_state.page == "chat":
     if "bg_tasks" not in st.session_state:
         scheduler = BackgroundScheduler()
-        scheduler.add_job(func=background_tasks, trigger="interval", seconds=5, 
-                          kwargs={
-                              "username": username,
-                              "api_srv": api_srv,
-                              "msg_srv": chat_module.msg_srv
-
-        })
+        scheduler.add_job(
+            func=background_tasks, trigger="interval", seconds=5, 
+            kwargs={
+                "username": username,
+                "api_srv": api_srv,
+                "msg_srv": chat_module.msg_srv
+            }
+        )
         scheduler.start()
         st.session_state.bg_tasks = True
     chat_module.show()
