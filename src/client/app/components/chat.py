@@ -1,4 +1,5 @@
 import streamlit as st
+import json, os
 from streamlit_autorefresh import st_autorefresh
 from components.ui_module import UIModule
 from services.api_handler_service import ApiHandlerService
@@ -6,6 +7,37 @@ from services.client_info_service import ClientInfoService
 from services.msg_service import MessageService
 from repositories.msg_repo import MessageRepository
 from helpers import render_html_template, inject_css
+
+
+# --- Callbacks y helpers para el picker de emojis (deben ser a nivel módulo) ---
+def _append_emoji(emoji: str, input_key: str = None):
+    """Añade un emoji al borrador actual. Si se pasa input_key, lo actualiza también."""
+    # Actualizar msg_draft
+    st.session_state.msg_draft = st.session_state.get("msg_draft", "") + emoji
+    # Si existe el input controlado, sincronizarlo
+    if input_key:
+        st.session_state[input_key] = st.session_state.msg_draft
+
+
+def _toggle_emoji_picker():
+    st.session_state.show_emoji_picker = not st.session_state.get("show_emoji_picker", False)
+
+
+def _load_emojis():
+    """Carga emojis desde static/data/emojis.json. Si falla, devuelve una lista por defecto."""
+    path = os.path.join(os.path.dirname(__file__), "..", "static", "data", "emojis.json")
+    path = os.path.normpath(path)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                return [str(e) for e in data]
+    except Exception:
+        pass
+    # Fallback
+    return ["😀","😃","😄","😁","🤣","😊","😍","😜","🤩","😎"]
+
+# ---------------------------------------------------------------------------
 
 
 class ChatModule(UIModule):
@@ -133,19 +165,58 @@ class ChatModule(UIModule):
                     st.markdown(html_preview, unsafe_allow_html=True)
 
         st.markdown("<hr>", unsafe_allow_html=True)
-        
+
+        # Inicializar estado para input y picker
         if "msg_input_key" not in st.session_state:
             st.session_state.msg_input_key = 0
+        if "msg_draft" not in st.session_state:
+            st.session_state.msg_draft = ""
+        if "show_emoji_picker" not in st.session_state:
+            st.session_state.show_emoji_picker = False
 
-        new_msg = st.chat_input(
-            "Escribe tu mensaje", 
-            key=f"msg_input_{st.session_state.msg_input_key}"
-        )
+        # Inyectar estilos para el picker (archivo creado antes)
+        inject_css("emoji_picker.css")
 
-        if new_msg:
-            self.msg_srv.send_message(username, st.session_state.selected_chat, new_msg)
-            st.session_state.msg_input_key += 1
-            st.rerun()
+        input_key = f"msg_input_{st.session_state.msg_input_key}"
+
+        # Asegurar que el widget text_input tenga el valor inicial del borrador
+        if input_key not in st.session_state:
+            st.session_state[input_key] = st.session_state.msg_draft
+
+        cols = st.columns([0.06, 0.80, 0.14])
+
+        with cols[0]:
+            st.button("😀", key=f"emoji_toggle_{st.session_state.msg_input_key}", on_click=_toggle_emoji_picker)
+
+        with cols[1]:
+            # Campo controlado
+            st.text_input("", key=input_key, placeholder="Escribe tu mensaje")
+            # Mantener copia canonical en msg_draft
+            st.session_state.msg_draft = st.session_state.get(input_key, "")
+
+        with cols[2]:
+            if st.button("Enviar", key=f"send_btn_{st.session_state.msg_input_key}"):
+                draft = st.session_state.get("msg_draft", "").strip()
+                if draft:
+                    self.msg_srv.send_message(username, st.session_state.selected_chat, draft)
+                    # limpiar
+                    st.session_state.msg_draft = ""
+                    if input_key in st.session_state:
+                        del st.session_state[input_key]
+                    st.session_state.msg_input_key += 1
+                    st.rerun()
+
+        # Renderizar picker si está abierto
+        if st.session_state.show_emoji_picker:
+            emojis = _load_emojis()
+            # Mostrar en filas de 10
+            per_row = 10
+            for i in range(0, len(emojis), per_row):
+                row = emojis[i:i+per_row]
+                cols_row = st.columns(len(row))
+                for j, e in enumerate(row):
+                    # Pasar input_key para sincronizar el text_input
+                    cols_row[j].button(e, key=f"emoji_{i+j}", on_click=_append_emoji, args=(e, input_key))
 
     def _create_new_chat(self, username):
         with st.sidebar.expander("Nuevo chat"):

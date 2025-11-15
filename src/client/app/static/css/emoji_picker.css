@@ -1,0 +1,20 @@
+/* Estilos simples para el selector de emojis */
+.emoji-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.emoji-row {
+  display: flex;
+  gap: 6px;
+}
+.emoji-btn {
+  background: transparent;
+  border: 0;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+}
+.emoji-btn:hover { background: rgba(0,0,0,0.06); }
