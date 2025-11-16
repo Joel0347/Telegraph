@@ -10,32 +10,7 @@ from helpers import render_html_template, inject_css
 
 
 # --- Callbacks y helpers para el picker de emojis (deben ser a nivel módulo) ---
-def _append_emoji(emoji: str, input_key: str = None):
-    """Añade un emoji al borrador actual. Si se pasa input_key, lo actualiza también."""
-    # Actualizar msg_draft
-    st.session_state.msg_draft = st.session_state.get("msg_draft", "") + emoji
-    # Si existe el input controlado, sincronizarlo
-    if input_key:
-        st.session_state[input_key] = st.session_state.msg_draft
 
-
-def _toggle_emoji_picker():
-    st.session_state.show_emoji_picker = not st.session_state.get("show_emoji_picker", False)
-
-
-def _load_emojis():
-    """Carga emojis desde static/emojis/emojis.json. Si falla, devuelve una lista por defecto."""
-    path = os.path.join(os.path.dirname(__file__), "..", "static", "emojis", "emojis.json")
-    path = os.path.normpath(path)
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            if isinstance(data, list):
-                return [str(e) for e in data]
-    except Exception:
-        pass
-    # Fallback
-    return ["😀","😃","😄","😁","🤣","😊","😍","😜","🤩","😎"]
 
 # ---------------------------------------------------------------------------
 
@@ -183,40 +158,31 @@ class ChatModule(UIModule):
         if input_key not in st.session_state:
             st.session_state[input_key] = st.session_state.msg_draft
 
-        cols = st.columns([0.06, 0.80, 0.14])
+        cols = st.columns([0.06, 0.80])
 
         with cols[0]:
-            st.button("😀", key=f"emoji_toggle_{st.session_state.msg_input_key}", on_click=_toggle_emoji_picker)
-
+            st.button(
+                "☺", key=f"emoji_toggle",
+                on_click=self._toggle_emoji_picker
+            )
         with cols[1]:
-            # Campo controlado
-            st.text_input("", key=input_key, placeholder="Escribe tu mensaje")
-            # Mantener copia canonical en msg_draft
-            st.session_state.msg_draft = st.session_state.get(input_key, "")
+            cols = st.columns([0.9, 0.1])
+            with cols[0]:
+                # Campo controlado
+                st.text_input(
+                    "", key=input_key, placeholder="Escribe tu mensaje",
+                    label_visibility="collapsed", value=st.session_state.msg_draft,
+                    on_change=self._update_draft, args=(input_key,)
+                )
 
-        with cols[2]:
-            if st.button("Enviar", key=f"send_btn_{st.session_state.msg_input_key}"):
-                draft = st.session_state.get("msg_draft", "").strip()
-                if draft:
-                    self.msg_srv.send_message(username, st.session_state.selected_chat, draft)
-                    # limpiar
-                    st.session_state.msg_draft = ""
-                    if input_key in st.session_state:
-                        del st.session_state[input_key]
-                    st.session_state.msg_input_key += 1
-                    st.rerun()
+            with cols[1]:
+                if st.button("➤", key=f"send_btn"):
+                    draft = st.session_state.get("msg_draft", "").strip()
+                    if draft:
+                        self._send(username, draft, input_key)
 
         # Renderizar picker si está abierto
-        if st.session_state.show_emoji_picker:
-            emojis = _load_emojis()
-            # Mostrar en filas de 10
-            per_row = 10
-            for i in range(0, len(emojis), per_row):
-                row = emojis[i:i+per_row]
-                cols_row = st.columns(len(row))
-                for j, e in enumerate(row):
-                    # Pasar input_key para sincronizar el text_input
-                    cols_row[j].button(e, key=f"emoji_{i+j}", on_click=_append_emoji, args=(e, input_key))
+        self._render_emojis(input_key)
 
     def _create_new_chat(self, username):
         with st.sidebar.expander("Nuevo chat"):
@@ -230,3 +196,56 @@ class ChatModule(UIModule):
                     st.rerun()
             else:
                 st.info("No hay otros usuarios disponibles para chatear.")
+    
+    def _send(self, username: str, text: str, input_key: str):
+        self.msg_srv.send_message(username, st.session_state.selected_chat, text)
+        # limpiar
+        st.session_state.msg_draft = ""
+        if input_key in st.session_state:
+            del st.session_state[input_key]
+        st.session_state.msg_input_key += 1
+        st.rerun()
+    
+    def _update_draft(self, input_key: str):
+        st.session_state.msg_draft = st.session_state.get(input_key, "")
+
+    def _append_emoji(self, emoji: str, input_key: str = None):
+        """Añade un emoji al borrador actual. Si se pasa input_key, lo actualiza también."""
+        # Actualizar msg_draft
+        st.session_state.msg_draft = st.session_state.get("msg_draft", "") + emoji
+        # Si existe el input controlado, sincronizarlo
+        if input_key:
+            st.session_state[input_key] = st.session_state.msg_draft
+
+    def _toggle_emoji_picker(self):
+        st.session_state.show_emoji_picker = not st.session_state.get("show_emoji_picker", False)
+
+    def _load_emojis(self):
+        """Carga emojis desde static/emojis/emojis.json. Si falla, devuelve una lista por defecto."""
+        path = os.path.join(os.path.dirname(__file__), "..", "static", "emojis", "emojis.json")
+        path = os.path.normpath(path)
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    return [str(e) for e in data]
+        except Exception:
+            pass
+        # Fallback
+        return ["😀","😃","😄","😁","🤣","😊","😍","😜","🤩","😎"]
+    
+    def _render_emojis(self, input_key: str):
+        if st.session_state.show_emoji_picker:
+            emojis = self._load_emojis()
+            # Mostrar en filas de 10
+            per_row = 10
+            for i in range(0, len(emojis), per_row):
+                row = emojis[i:i+per_row]
+                cols_row = st.columns(len(row))
+                for j, e in enumerate(row):
+                    # Pasar input_key para sincronizar el text_input
+                    cols_row[j].button(
+                        e, key=f"emoji_{i+j}",
+                        on_click=self._append_emoji, args=(e, input_key),
+                        type="tertiary"
+                    )
