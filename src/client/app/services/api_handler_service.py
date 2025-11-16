@@ -41,13 +41,18 @@ class ApiHandlerService():
 
         self.api_urls = list(api_urls)
     
-    def _request_all(self, method: str, path: str, **kwargs):
+    def _request_all(self, method: str, path: str, **kwargs) -> requests.Response:
         """
         Helper que intenta la petición en todas las URLs de managers.
         Retorna la primera respuesta exitosa, o None si todas fallan.
         """
-        res = None
+
+        res = requests.Response()
+        res.status_code = 503
+        res._content = b'{"message":"No managers disponibles", "status": 500}'
+        res.headers['Content-Type'] = 'application/json'
         api_port = int(os.getenv("API_PORT", "8000"))
+
         for base_url in self.api_urls:
             try:
                 res = requests.request(
@@ -82,7 +87,7 @@ class ApiHandlerService():
             if res.json()["status"] == 200:
                 return [u["username"] for u in res.json()['usernames'] if u["username"] != username]
             else:
-                # publish_status(res.json())
+                publish_status(res.json())
                 return []
         except Exception as e:
             publish_status({'message': f"Error inesperado {e}", 'status': 500})
@@ -108,7 +113,7 @@ class ApiHandlerService():
             if res.json()["status"] == 200:
                 return res.json()["message"]
             else:
-                # publish_status(res.json())
+                publish_status(res.json())
                 return {}
         except Exception as e:
             publish_status({'message': f"Error inesperado {e}", 'status': 500})
@@ -117,8 +122,8 @@ class ApiHandlerService():
     def notify_online(self, username: str):
         try:
             # res = requests.get(f"{self.api_urls}/users/{username}")
-            self._request_all("GET", f"/users/{username}")
-            # publish_status(res.json())
+            res = self._request_all("GET", f"/users/{username}")
+            publish_status(res.json())
         except Exception as e:
             publish_status({'message': f"Error inesperado {e}", 'status': 500})
     
@@ -126,7 +131,7 @@ class ApiHandlerService():
         try:
             # res = requests.get(f"{self.api_urls}/users/active/{username}")
             res = self._request_all("GET", f"/users/active/{username}")
-            # publish_status(res.json())
+            publish_status(res.json())
             
             if res.json()["status"] == 200:
                 return res.json()["message"] == "online"
@@ -137,16 +142,16 @@ class ApiHandlerService():
         
     def send_heart_beat(self, username: str):
         # try:
-        self._request_all("POST", "/heartbeat", json={"username": username})
-            # publish_status(res.json())
+        res = self._request_all("POST", "/heartbeat", json={"username": username})
+        publish_status(res.json())
         # except Exception as e:
         #     publish_status({'message': f"Error inesperado {e}", 'status': 500})
             
     def logout(self, username: str):
-        self._request_all("POST", "/logout", json={"username": username})
+        res = self._request_all("POST", "/logout", json={"username": username})
         # try:
         #     res = requests.post(f"{self.api_urls}/logout", json={"username": username})
-        #     publish_status(res.json())
+        publish_status(res.json())
         # except Exception as e:
         #     publish_status({'message': f"Error inesperado: {e}", 'status': 500})
             
@@ -166,7 +171,7 @@ class ApiHandlerService():
             #     "port": get_local_port(),
             #     "status": "online"
             # })
-            # publish_status(res.json())
+            publish_status(res.json())
             
             return res.json()["status"] == 200
         except Exception as e:
@@ -179,8 +184,8 @@ class ApiHandlerService():
             saved_addr = self.get_peer_address(username)
 
             if current_addr != saved_addr:
-                self._request_all("PUT", f"/users/reconnect/{current_addr}/{username}")
+                res = self._request_all("PUT", f"/users/reconnect/{current_addr}/{username}")
                 # res = requests.put(f"{self.api_urls}/users/reconnect/{current_addr}/{username}")
-                # publish_status(res.json())
+                publish_status(res.json())
         except Exception as e:
             publish_status({'message': f"Error inesperado: {e}", 'status': 500})

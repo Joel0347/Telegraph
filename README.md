@@ -110,7 +110,9 @@ docker build -t src-client:latest ./client
 
 2. Create a network
 ```bash
-docker network create <network_name>
+docker network create <network_name> \
+  --subnet 172.30.1.0/28 \
+  --gateway 172.30.1.1
 ```
 
 or if you are using swarm:
