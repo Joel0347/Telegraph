@@ -24,8 +24,8 @@ def _toggle_emoji_picker():
 
 
 def _load_emojis():
-    """Carga emojis desde static/data/emojis.json. Si falla, devuelve una lista por defecto."""
-    path = os.path.join(os.path.dirname(__file__), "..", "static", "data", "emojis.json")
+    """Carga emojis desde static/emojis/emojis.json. Si falla, devuelve una lista por defecto."""
+    path = os.path.join(os.path.dirname(__file__), "..", "static", "emojis", "emojis.json")
     path = os.path.normpath(path)
     try:
         with open(path, "r", encoding="utf-8") as f:
