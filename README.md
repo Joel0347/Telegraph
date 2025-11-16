@@ -133,7 +133,7 @@ docker run --rm \
   --network-alias identity-manager \
   -v $(pwd)/identity-manager/app:/app \
   -v $(pwd)/volumes/identity-data:/data \
-  -p 8100:8000 \
+  -p <port_on_host>:8000 \
   -e DNS_PORT=5353 \
   src-identity-manager:latest
 ```
