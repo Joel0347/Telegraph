@@ -9,12 +9,6 @@ from repositories.msg_repo import MessageRepository
 from helpers import render_html_template, inject_css
 
 
-# --- Callbacks y helpers para el picker de emojis (deben ser a nivel módulo) ---
-
-
-# ---------------------------------------------------------------------------
-
-
 class ChatModule(UIModule):
     def __init__(self, api_service: ApiHandlerService, client_service: ClientInfoService):
         self.api_srv = api_service
@@ -33,6 +27,7 @@ class ChatModule(UIModule):
         if st.sidebar.button("Cerrar Sesión", type='primary'):
             self.api_srv.logout(username)
             st.session_state.page = "login"
+            st.session_state.msg_draft = ""
             self.client_srv.remove_username()
             st.rerun()
 
