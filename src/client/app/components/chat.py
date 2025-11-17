@@ -166,7 +166,7 @@ class ChatModule(UIModule):
                 # Campo controlado
                 st.text_input(
                     "", key=input_key, placeholder="Escribe tu mensaje",
-                    label_visibility="collapsed", value=st.session_state.msg_draft,
+                    label_visibility="collapsed",
                     on_change=self._update_draft, args=(input_key,)
                 )
 
