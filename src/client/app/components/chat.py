@@ -1,13 +1,13 @@
 import streamlit as st
 import json, os
 from streamlit_autorefresh import st_autorefresh
+import streamlit.components.v1 as components
 from components.ui_module import UIModule
 from services.api_handler_service import ApiHandlerService
 from services.client_info_service import ClientInfoService
 from services.msg_service import MessageService
 from repositories.msg_repo import MessageRepository
 from helpers import render_html_template, inject_css
-
 
 class ChatModule(UIModule):
     def __init__(self, api_service: ApiHandlerService, client_service: ClientInfoService):
@@ -33,17 +33,13 @@ class ChatModule(UIModule):
 
         st.sidebar.title("Chats")
         chat_partners = [g.name for g in user_chats]
-
-        # Obtener usuarios online
         online_set = set(online_users) if online_users else set()
-
-        # Construir lista de info para la sidebar
         sidebar_items = []
+
         for partner in chat_partners:
             group = next((g for g in user_chats if g.name == partner), None)
             msgs = group.messages if group else []
 
-            # Si los mensajes son objetos Message, acceder con .text
             if msgs:
                 last = msgs[-1]
                 last_msg = getattr(last, "text", str(last))
@@ -60,7 +56,7 @@ class ChatModule(UIModule):
             st.session_state.selected_chat = None
         if st.session_state.selected_chat is None and sidebar_items:
             st.session_state.selected_chat = sidebar_items[0]["name"]
-        # Mostrar lista custom y manejar selección
+
         selected_idx = 0
         if st.session_state.selected_chat:
             for i, item in enumerate(sidebar_items):
@@ -68,7 +64,6 @@ class ChatModule(UIModule):
                     selected_idx = i
                     break
 
-        # Render manual de la lista y selección
         for i, item in enumerate(sidebar_items):
             is_selected = (i == selected_idx)
             inject_css("sidebar_chats.css")
@@ -105,7 +100,9 @@ class ChatModule(UIModule):
 
     def _render_chat_area(self, username):
         inject_css("chat_header.css")
-        html_preview = render_html_template("chat_header.html", chat_with=st.session_state.selected_chat)
+        html_preview = render_html_template(
+            "chat_header.html", chat_with=st.session_state.selected_chat
+        )
         st.markdown(html_preview, unsafe_allow_html=True)
         chat_msgs = self.msg_srv.get_chat(username, st.session_state.selected_chat)
         chat_box = st.container()
@@ -136,7 +133,6 @@ class ChatModule(UIModule):
 
         st.markdown("<hr>", unsafe_allow_html=True)
 
-        # Inicializar estado para input y picker
         if "msg_input_key" not in st.session_state:
             st.session_state.msg_input_key = 0
         if "msg_draft" not in st.session_state:
@@ -144,14 +140,10 @@ class ChatModule(UIModule):
         if "show_emoji_picker" not in st.session_state:
             st.session_state.show_emoji_picker = False
 
-        # Inyectar estilos para el picker (archivo creado antes)
         inject_css("emoji_picker.css")
 
-        input_key = f"msg_input_{st.session_state.msg_input_key}"
-
-        # Asegurar que el widget text_input tenga el valor inicial del borrador
-        if input_key not in st.session_state:
-            st.session_state[input_key] = st.session_state.msg_draft
+        if "msg" not in st.session_state:
+            st.session_state.msg = st.session_state.msg_draft
 
         cols = st.columns([0.06, 0.80])
 
@@ -161,30 +153,38 @@ class ChatModule(UIModule):
                 on_click=self._toggle_emoji_picker
             )
         with cols[1]:
-            cols = st.columns([0.9, 0.1])
-            with cols[0]:
-                # Campo controlado
+            subcols = st.columns([0.9, 0.1])
+            with subcols[0]:
                 st.text_input(
-                    "", key=input_key, placeholder="Escribe tu mensaje",
+                    "", key="msg", placeholder="Escribe tu mensaje",
                     label_visibility="collapsed",
-                    on_change=self._update_draft, args=(input_key,)
+                    on_change=self._update_draft
                 )
 
-            with cols[1]:
-                if st.button("➤", key=f"send_btn"):
+            with subcols[1]:
+                if st.button("➤", key="msg_btn"):
                     draft = st.session_state.get("msg_draft", "").strip()
                     if draft:
-                        self._send(username, draft, input_key)
+                        self._send(username, draft)
 
-        # Renderizar picker si está abierto
-        self._render_emojis(input_key)
+        components.html(
+            render_html_template(
+                "keypress_event.html",
+                placeholder="Escribe tu mensaje",
+                btn_text="➤"
+            ), height=0
+        )
+
+        self._render_emojis()
 
     def _create_new_chat(self, username):
         with st.sidebar.expander("Nuevo chat"):
             all_users = self.api_srv.get_users(username)
             
             if all_users:
-                new_receiver = st.selectbox("Selecciona usuario para chatear", all_users, key="new_chat_select")
+                new_receiver = st.selectbox(
+                    "Selecciona usuario para chatear", all_users, key="new_chat_select"
+                )
                 
                 if st.button("Iniciar chat", key="start_chat_btn"):
                     st.session_state.selected_chat = new_receiver
@@ -192,31 +192,25 @@ class ChatModule(UIModule):
             else:
                 st.info("No hay otros usuarios disponibles para chatear.")
     
-    def _send(self, username: str, text: str, input_key: str):
+    def _send(self, username: str, text: str):
         self.msg_srv.send_message(username, st.session_state.selected_chat, text)
-        # limpiar
         st.session_state.msg_draft = ""
-        if input_key in st.session_state:
-            del st.session_state[input_key]
+        if "msg" in st.session_state:
+            del st.session_state.msg
         st.session_state.msg_input_key += 1
         st.rerun()
     
-    def _update_draft(self, input_key: str):
-        st.session_state.msg_draft = st.session_state.get(input_key, "")
+    def _update_draft(self):
+        st.session_state.msg_draft = st.session_state.get("msg", "")
 
-    def _append_emoji(self, emoji: str, input_key: str = None):
-        """Añade un emoji al borrador actual. Si se pasa input_key, lo actualiza también."""
-        # Actualizar msg_draft
+    def _append_emoji(self, emoji: str):
         st.session_state.msg_draft = st.session_state.get("msg_draft", "") + emoji
-        # Si existe el input controlado, sincronizarlo
-        if input_key:
-            st.session_state[input_key] = st.session_state.msg_draft
+        st.session_state.msg = st.session_state.msg_draft
 
     def _toggle_emoji_picker(self):
         st.session_state.show_emoji_picker = not st.session_state.get("show_emoji_picker", False)
 
     def _load_emojis(self):
-        """Carga emojis desde static/emojis/emojis.json. Si falla, devuelve una lista por defecto."""
         path = os.path.join(os.path.dirname(__file__), "..", "static", "emojis", "emojis.json")
         path = os.path.normpath(path)
         try:
@@ -226,21 +220,19 @@ class ChatModule(UIModule):
                     return [str(e) for e in data]
         except Exception:
             pass
-        # Fallback
+
         return ["😀","😃","😄","😁","🤣","😊","😍","😜","🤩","😎"]
     
-    def _render_emojis(self, input_key: str):
+    def _render_emojis(self):
         if st.session_state.show_emoji_picker:
             emojis = self._load_emojis()
-            # Mostrar en filas de 10
             per_row = 10
             for i in range(0, len(emojis), per_row):
                 row = emojis[i:i+per_row]
                 cols_row = st.columns(len(row))
                 for j, e in enumerate(row):
-                    # Pasar input_key para sincronizar el text_input
                     cols_row[j].button(
                         e, key=f"emoji_{i+j}",
-                        on_click=self._append_emoji, args=(e, input_key),
+                        on_click=self._append_emoji, args=(e,),
                         type="tertiary"
                     )
