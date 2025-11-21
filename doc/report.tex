@@ -1,0 +1,157 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{hyperref}
+\usepackage{geometry}
+\geometry{margin=1in}
+\title{Informe de Diseño del Proyecto}
+\author{Claudia Hernández Pérez \and Joel Aparicio Tamayo}
+\date{Noviembre, 2025}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+    \textit{Telegraph} es una aplicación de mensajería distribuida con una arquitectura peer-to-peer en
+la que cualquier cliente puede recibir y mandar mensajes con la garantía de que solo lo podrán ver los 
+involucrados en la conversación. Existen dos entidades fundamentales: cliente y gestor de entidades. 
+Los clientes son el sistema en sí y la comunicación entre estos es la piedra angular de la tarea, mientras que 
+los gestores de identidades son los encargados de manejar la información de los usuarios.
+\end{abstract}
+
+\section{Arquitectura}
+
+Los sistemas distribuidos modernos han evolucionado a través de diversos modelos arquitectónicos que buscan optimizar la
+escalabilidad, tolerancia a fallos y eficiencia en la comunicación. Entre estos modelos, las arquitecturas \textit{peer-to-peer}
+(P2P) han demostrado ser particularmente efectivas para aplicaciones que requieren descentralización y colaboración directa entre nodos.
+
+Las arquitecturas P2P se caracterizan por la ausencia de roles fijos entre clientes y servidores, donde todos los nodos participan
+activamente tanto en la provisión como en el consumo de servicios. Existen principalmente dos variantes: los sistemas \textbf{P2P estructurados},
+que organizan los nodos en topologías deterministas como anillos o DHTs para permitir búsquedas eficientes; y los sistemas \textbf{P2P no estructurados},
+donde las conexiones entre nodos se establecen de forma ad-hoc (no siguen un plan preestablecido).
+
+\subsection{Organización del sistema distribuido}
+\textit{Telegraph} basa su funcionamiento en una arquitectura \textit{peer-to-peer} no estructurada con un funcionamiento
+inspirado en \textit{BitTorrent}: los clientes, para enviar mensajes, consultan a los gestores de identidades para 
+obtener la \texttt{IP} del destinatario y establecer comunicación directa con él, lo cual es un comportamiento similar
+a la solicitud de \texttt{peers} a los \texttt{trackers}, para intercambiar \texttt{chunks} entre ellos.
+
+\subsection{Roles existentes en el sistema}
+En el sistema existen dos roles principales: clientes (\textit{clients}) y gestores de identidades (\textit{identity managers}).:
+
+\begin{enumerate}
+    \item \textbf{gestor de identidades:} es el responsable de gestionar toda la información de las cuentas, tal como:
+        \begin{itemize}
+            \item Nombre de usuario
+            \item Contraseña encriptada
+            \item Dirección IP y puerto
+            \item Estado de conexión (en línea ó desconectado)
+            \item Última vez visto en línea
+        \end{itemize}
+    \item \textbf{clientes:} pueden comunicarse entre sí directamente sin un servidor centralizado que almacene mensajes temporalmente. Cada cliente puede realizar las siguientes acciones:
+
+\begin{itemize}
+    \item Enviar mensajes
+    \item Recibir mensajes
+    \item Notificar que un mensaje ha sido leído
+    \item Reintentar el envío de mensajes pendientes a usuarios fuera de línea
+\end{itemize}
+\end{enumerate}
+
+\subsection{Distribución de servicios en ambas redes de Docker}
+
+La implementación del sistema distribuido se despliega utilizando Docker Swarm con una red overlay attachable que permite la comunicación transparente entre contenedores ejecutándose en diferentes hosts físicos. Esta configuración replica un entorno de producción real donde los servicios están distribuidos geográficamente.
+
+\begin{itemize}
+    \item \textbf{Red Overlay}: Se crea una red Docker Swarm de tipo overlay que conecta ambos hosts físicos, permitiendo que los contenedores se comuniquen como si estuvieran en la misma red local.
+    
+    \item \textbf{Distribución de Gestores}: Los $2K+1$ nodos del cluster Raft se distribuyen estratégicamente entre ambos hosts físicos para garantizar tolerancia a fallos incluso ante la caída de un host completo.
+    
+    \item \textbf{Balanceo de Clientes}: Los clientes P2P se despliegan de forma balanceada entre ambos hosts, simulando usuarios en diferentes ubicaciones de red.
+    
+    \item \textbf{Descubrimiento de Servicios}: Docker Swarm proporciona DNS interno que permite a los contenedores descubrir automáticamente los servicios desplegados en la red overlay.
+\end{itemize}
+
+
+\section{Procesos y servicios}
+\subsection{Procesos en el cliente}
+- Interfaz principal: \path{main.py} arranca la UI en Streamlit y lanza un hilo para el servidor Flask (\texttt{start\_flask\_server}).
+- Servidor Flask embebido: \path{server.py} expone endpoints HTTP para recibir mensajes (\path{/receive_message}), notificación de lectura (\path{/notify_read}) y desconexión (\path{/disconnect}).
+- Tareas en segundo plano: la función \texttt{background\_tasks} (\path{background_tasks.py}) es programada periódicamente con APScheduler y realiza:
+- Reintento de recibos no sincronizados (\texttt{MessageService.retry\_unsynchronized\_receipts}).
+- Consulta de usuarios online (\texttt{ApiHandlerService.get\_online\_users}).
+- Actualización de la IP local (\texttt{ApiHandlerService.update\_ip\_address}).
+- Envío de mensajes pendientes (\texttt{MessageService.send\_pending\_mssgs}).
+
+\subsection{Procesos en el identity manager}
+- Servidor REST (Flask): rutas para \path{/register}, \path{/login}, \path{/logout}, \path{/peers}, \path{/users}, \path{/heartbeat} y endpoints de utilidad para reconectar IPs.
+- UDP discovery: \texttt{udp\_discovery.run\_server} escucha en el puerto DNS (por defecto 5353) y responde a peticiones de descubrimiento para permitir que clientes encuentren managers en la red overlay.
+- Job de limpieza: un job periódicamente marca como \texttt{offline} a usuarios inactivos (en \path{api.py} con APScheduler) y notifica a clientes para desconectar.
+
+\section{Comunicación}
+\subsection{Protocolos utilizados}
+La comunicación entre componentes utiliza HTTP(S) sobre la red overlay (en la implementación actual se usan peticiones HTTP simples con la librería \texttt{requests}). Para descubrimiento en la red local se usa UDP broadcast en \path{udp_discovery.py}.
+
+\subsection{Patrones de interacción}
+- Cliente \textless-\textgreater Identity Manager: peticiones REST (REQ-REP) para registrar, autenticar, consultar usuarios y enviar heartbeat (implementado en \texttt{ApiHandlerService}).
+- Cliente \textless-\textgreater Cliente: los clientes exponen un servidor HTTP (Flask) para recibir mensajes y recibos. El remitente realiza una petición POST a \path{/receive_message} del receptor.
+- Descubrimiento: UDP broadcast/response para detectar managers disponibles.
+
+\section{Coordinación}
+La coordinación se realiza principalmente mediante:
+- Estados con sello temporal: los usuarios registran \texttt{last\_seen} en \texttt{AuthService.update\_last\_seen} y el identity manager utiliza ese campo para decidir inactividad.
+- Heartbeats: los clientes envían latidos periódicos con \texttt{ApiHandlerService.send\_heart\_beat} y el manager actualiza \texttt{last\_seen}.
+- Jobs de mantenimiento: \texttt{check\_inactive\_users} en el identity manager marca usuarios offline y fuerza desconexiones cuando procede.
+
+\section{Nombrado y localización}
+Los recursos (usuarios) se nombran por \texttt{username}. La localización se resuelve consultando el identity manager mediante \path{/users/<username>} y obteniendo \texttt{ip} y \texttt{port}. El cliente también mantiene un pequeño repositorio local (\texttt{ClientRepository}) que guarda el nombre de usuario en \path{.env} dentro del directorio de datos.
+
+\section{Consistencia y replicación}
+La implementación actual no incorpora replicación distribuida ni un anillo Chord. En su lugar se aplica una persistencia local en cada cliente (archivos JSON) y un registro centralizado de usuarios en el identity manager (fichero JSON \path{/data/users.json}).
+
+Consecuencia: no hay tolerancia a particiones en lo que respecta al registro de usuarios; si el manager que contiene el fichero de usuarios deja de estar disponible, los clientes solo pueden actuar con la información cacheada localmente o hasta que descubran otro manager.
+
+\section{Tolerancia a fallos}
+Medidas actuales:
+- Descubrimiento múltiple: \texttt{ApiHandlerService} intenta localizar managers vía DNS (resolviendo \texttt{identity-manager}) y, si falla, hace broadcast sobre la red overlay para localizar managers activos; mantiene una lista \texttt{api\_urls} y reintenta peticiones a diferentes managers.
+- Reintentos y marcadores locales: \texttt{MessageService} marca mensajes como \texttt{pending} si no puede contactar al receptor, y reintenta su envío periódicamente desde las tareas en background.
+- Detección de inactividad: el identity manager marca usuarios como offline si no reciben heartbeats y fuerza desconexiones.
+
+Limitaciones:
+- No existe replicación de la base de datos de usuarios ni de los mensajes a otros gestores; la tolerancia a fallos está limitada a la disponibilidad de los ficheros JSON del manager y de los propios clientes.
+
+\section{Seguridad}
+\subsection{Autenticación y contraseñas}
+Las contraseñas de los usuarios se hashean con bcrypt (\texttt{AuthService.hash\_password}) antes de almacenarlas en el repositorio de usuarios (\texttt{UserRepository} guarda datos en JSON en \path{/data/users.json}). La verificación se realiza con \texttt{checkpw}.
+
+\subsection{Canales y cifrado}
+En la versión actual no hay cifrado de transporte (no hay TLS configurado en las peticiones HTTP internas). Esto es una área prioritaria de mejora: se recomienda habilitar HTTPS entre managers y clientes y/o establecer túneles VPN / mTLS en despliegues reales.
+
+\subsection{Consideraciones adicionales}
+- Validación básica de payloads en endpoints Flask.
+- No hay control de acceso granular ni lista blanca de managers; cualquiera que responda al discovery UDP puede ser usado por clientes si le han descubierto.
+
+\section{Conclusiones y trabajo futuro}
+La implementación actual es una prueba de concepto funcional que cubre:
+- Registro, login y localización de usuarios mediante un \textit{identity manager} ligero.
+- Intercambio directo de mensajes entre clientes mediante HTTP y persistencia local de mensajes.
+- Mecanismos básicos de disponibilidad (heartbeat, detección de inactividad, reintentos de envío).
+
+Mejoras recomendadas:
+- Implementar replicación y tolerancia a fallos entre gestores (por ejemplo, un anillo Chord o replicación maestro-esclavo para \path{users.json}).
+- Asegurar canales con TLS/mTLS y proteger el UDP discovery.
+- Añadir pruebas automáticas y scripts de despliegue reproducible.
+
+\newpage
+\section*{Apéndice: Referencias a código}
+Se listan los ficheros más relevantes y su propósito:
+- \path{src/client/app/main.py}: UI Streamlit y arranque de servicios.
+- \path{src/client/app/server.py}: servidor Flask del cliente (endpoints para recibir mensajes y recibos).
+- \path{src/client/app/background_tasks.py}: loop de sincronización y reintentos.
+- \path{src/client/app/services/}: lógica de negocio cliente (API handler, client info, message service).
+- \path{src/client/app/repositories/}: persistencia local (mensajes, usuario local).
+- \path{src/identity-manager/app/api.py}: server REST del manager.
+- \path{src/identity-manager/app/udp_discovery.py}: discovery por UDP.
+- \path{src/identity-manager/app/services/auth_service.py}: autenticación y gestión de usuarios.
+
+\end{document}
