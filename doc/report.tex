@@ -40,15 +40,15 @@ a la solicitud de \texttt{peers} a los \texttt{trackers}, para intercambiar \tex
 En el sistema existen dos roles principales: clientes (\textit{clients}) y gestores de identidades (\textit{identity managers}).:
 
 \begin{enumerate}
-    \item \textbf{gestor de identidades:} es el responsable de gestionar toda la información de las cuentas, tal como:
+    \item \textbf{gestor de identidades}: es el responsable de gestionar toda la información de las cuentas, tal como:
         \begin{itemize}
             \item Nombre de usuario
             \item Contraseña encriptada
-            \item Dirección IP y puerto
+            \item Dirección \texttt{IP} y puerto
             \item Estado de conexión (en línea ó desconectado)
             \item Última vez visto en línea
         \end{itemize}
-    \item \textbf{clientes:} pueden comunicarse entre sí directamente sin un servidor centralizado que almacene mensajes temporalmente. Cada cliente puede realizar las siguientes acciones:
+    \item \textbf{clientes}: pueden comunicarse entre sí directamente sin un servidor centralizado que almacene mensajes temporalmente. Cada cliente puede realizar las siguientes acciones:
 
 \begin{itemize}
     \item Enviar mensajes
@@ -60,33 +60,77 @@ En el sistema existen dos roles principales: clientes (\textit{clients}) y gesto
 
 \subsection{Distribución de servicios en ambas redes de Docker}
 
-La implementación del sistema distribuido se despliega utilizando Docker Swarm con una red overlay attachable que permite la comunicación transparente entre contenedores ejecutándose en diferentes hosts físicos. Esta configuración replica un entorno de producción real donde los servicios están distribuidos geográficamente.
+La implementación del sistema distribuido se despliega utilizando \textit{Docker Swarm} con una red \texttt{overlay attachable} que permite la comunicación transparente entre contenedores ejecutándose en diferentes hosts físicos. Esta configuración replica un entorno de producción real donde los servicios están distribuidos geográficamente.
 
 \begin{itemize}
-    \item \textbf{Red Overlay}: Se crea una red Docker Swarm de tipo overlay que conecta ambos hosts físicos, permitiendo que los contenedores se comuniquen como si estuvieran en la misma red local.
+    \item \textbf{Balanceo de Clientes}: Los clientes \textbf{P2P} pueden desplegarse en ambos hosts (tantos como se deseen), simulando usuarios en diferentes ubicaciones de red. Lo que se recomienda es balancear entre ambos hosts físicos para sobrecargar lo menos posible cada uno.
     
-    \item \textbf{Distribución de Gestores}: Los $2K+1$ nodos del cluster Raft se distribuyen estratégicamente entre ambos hosts físicos para garantizar tolerancia a fallos incluso ante la caída de un host completo.
+    \item \textbf{Distribución de Gestores}: Inicialmente el sistema contará con $4k - 2$ réplicas de gestores (siendo $k$ la tolerancia a fallas esperada), donde cada host contará con $2k-1$ gestores. De esta forma se garantiza que si se pierde la conexión entre ambos hosts físicos, en cada red independiente se logre una tolerancia a fallas $k-1$. Esta desición puede estra sujeta a cambios futuros.
     
-    \item \textbf{Balanceo de Clientes}: Los clientes P2P se despliegan de forma balanceada entre ambos hosts, simulando usuarios en diferentes ubicaciones de red.
-    
-    \item \textbf{Descubrimiento de Servicios}: Docker Swarm proporciona DNS interno que permite a los contenedores descubrir automáticamente los servicios desplegados en la red overlay.
+    \item \textbf{Descubrimiento de Servicios}: \textit{Docker Swarm} proporciona un \textbf{DNS} interno que permite a los contenedores descubrir automáticamente los servicios desplegados en la red \texttt{overlay}. Además, se cuenta con una alternativa ante posibles fallos del \textbf{DNS} que se explicará en otra sección más adelante.
 \end{itemize}
 
 
-\section{Procesos y servicios}
-\subsection{Procesos en el cliente}
-- Interfaz principal: \path{main.py} arranca la UI en Streamlit y lanza un hilo para el servidor Flask (\texttt{start\_flask\_server}).
-- Servidor Flask embebido: \path{server.py} expone endpoints HTTP para recibir mensajes (\path{/receive_message}), notificación de lectura (\path{/notify_read}) y desconexión (\path{/disconnect}).
-- Tareas en segundo plano: la función \texttt{background\_tasks} (\path{background_tasks.py}) es programada periódicamente con APScheduler y realiza:
-- Reintento de recibos no sincronizados (\texttt{MessageService.retry\_unsynchronized\_receipts}).
-- Consulta de usuarios online (\texttt{ApiHandlerService.get\_online\_users}).
-- Actualización de la IP local (\texttt{ApiHandlerService.update\_ip\_address}).
-- Envío de mensajes pendientes (\texttt{MessageService.send\_pending\_mssgs}).
+\section{Procesos}
 
-\subsection{Procesos en el identity manager}
-- Servidor REST (Flask): rutas para \path{/register}, \path{/login}, \path{/logout}, \path{/peers}, \path{/users}, \path{/heartbeat} y endpoints de utilidad para reconectar IPs.
-- UDP discovery: \texttt{udp\_discovery.run\_server} escucha en el puerto DNS (por defecto 5353) y responde a peticiones de descubrimiento para permitir que clientes encuentren managers en la red overlay.
-- Job de limpieza: un job periódicamente marca como \texttt{offline} a usuarios inactivos (en \path{api.py} con APScheduler) y notifica a clientes para desconectar.
+Los sistemas distribuidos están constituidos por procesos que representan las unidades fundamentales de ejecución, responsables de llevar a cabo las diversas tareas y servicios que componen el sistema. Estos procesos, distribuidos en múltiples nodos de red, cooperan y se comunican para ofrecer funcionalidades integradas y transparentes al usuario final. La correcta organización y coordinación entre procesos determina en gran medida la escalabilidad, eficiencia y confiabilidad del sistema distribuido. En el contexto de \textit{Telegraph}, el sistema se estructura alrededor de dos tipos principales de procesos: los procesos del cliente y los del gestor.
+
+\subsection{Tipos de procesos dentro del sistema}
+
+El sistema implementa una arquitectura de procesos especializados que se dividen en dos categorías principales:
+
+\begin{itemize}
+    \item \textbf{Procesos del gestor}:
+    \begin{itemize}
+        \item \textbf{Servidor \textit{Flask}}: Proceso que expone APIs REST para autenticación, registro, resolución de direcciones \texttt{IP}, entre otras solicitudes.
+        \item \textbf{\textit{Worker} de verificación}: Proceso periódico con APScheduler que monitorea los usuarios inactivos del sistema y actualiza su estado a \textit{offline}.
+        \item \textbf{Servidor \texttt{UDP}}: Proceso que mantiene un socket UDP abierto para descubrimiento alternativo de gestores.
+    \end{itemize}
+    
+    \item \textbf{Procesos del cliente}:
+    \begin{itemize}
+        \item \textbf{Interfaz Streamlit}: Proceso que renderiza la interfaz gráfica y gestiona la interacción del usuario.
+        \item \textbf{Servidor \textit{Flask}}: Proceso que expone APIs REST para comunicación entre clientes.
+        \item \textbf{\textit{Worker} para tareas pendientes}: Tareas programadas con APScheduler para gestionar mensajes o actualizaciones de estado pendientes.
+        \item \textbf{Servicio de mensajería}: Componente que establece conexiones directas con otros clientes para envío de mensajes.
+        \item \textbf{Servicio para comunicación con gestores}: Componente encargado del descubrimiento inicial de gestores, así como de todas las solicitudes que les envían los clientes.
+    \end{itemize}
+\end{itemize}
+
+\subsection{Organización o agrupación de los procesos en el sistema}
+
+Los procesos del sistema se agrupan en las dos categorías ya conocidas. Cada una posee un proceso principal y el resto ejecutan tareas en segundo plano:
+
+\begin{itemize}
+    \item \textbf{Organización de procesos del gestor}:
+    \begin{itemize}
+        \item \textbf{Proceso principal}: Servidor \textit{Flask}
+        \item \textbf{Procesos independientes en segundo plano}: \textit{Worker} de verificación y servidor \texttt{UDP}.
+    \end{itemize}
+
+        En el gestor, los procesos no se comunican entre sí.
+    
+    \item \textbf{Organización de procesos del cliente}:
+    \begin{itemize}
+        \item \textbf{Proceso principal}: Interfaz de \textit{Streamlit}. Cada vez que se renderiza, se emplea el componente de comunicación con gestores para enviar señales de vida y obtener el listado de clientes activos. Con las interacciones del usuario se utiliza, además, el servicio de mensajería para comunicarse.
+        \item \textbf{Procesos independientes en segundo plano}: \textit{Worker} para tareas pendientes y servidor \textit{Flask}. Aunque este último no se comunica directamente con el servicio de mensajería ni con el \textit{Worker} dentro del propio cliente, sí son componentes relacionados, ya que los mensajes llegan de emisor a receptor por solicitudes \texttt{HTTP} que recaen sobre dicho servidor. Igualmente, los mensajes y notificaciones de lectura pendientes que se reintentan llegan a los \textit{end-points} de \textit{Flask} en el receptor.
+    \end{itemize}
+\end{itemize}
+
+\subsection{Tipo de patrón de diseño con respecto al desempeño}
+
+El sistema implementa \textbf{concurrencia basada en hilos} bajo el modelo \textbf{Many-to-One}:
+
+\begin{itemize}
+    \item \textbf{Hilos especializados}: Diferentes componentes ejecutan en hilos separados dentro del mismo proceso:
+        \begin{itemize}
+            \item \textbf{cliente}: El proceso principal es el que ejecuta la interfaz gráfica de \textit{Streamlit}. De él se desprenden dos hilos: uno para el \textit{APScheduler} encargado de las tareas pendientes y otro para el servidor de \textit{Flask}. El resto de tareas se ejecutan en el proceso principal.
+            \item \textbf{gestor}: El proceso principal es el que ejecuta el servidor de \textit{Flask}. De él se desprenden dos hilos: uno para el \textit{APScheduler} encargado de detectar usuarios inactivos y otro para el servidor \texttt{UDP}.
+        \end{itemize}
+    
+    \item \textbf{Hilo por solicitud}: Los servidores \textit{Flask} con \texttt{threaded=True} implementan este patrón para manejar múltiples solicitudes \texttt{HTTP} concurrentemente.
+\end{itemize}
+
 
 \section{Comunicación}
 \subsection{Protocolos utilizados}
