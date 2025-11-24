@@ -4,6 +4,11 @@
 \usepackage[spanish]{babel}
 \usepackage{hyperref}
 \usepackage{geometry}
+\usepackage{multirow}
+\addto\captionsspanish{
+  \renewcommand{\listtablename}{Índice de tablas}
+  \renewcommand{\tablename}{Tabla}
+}
 \geometry{margin=1in}
 \title{Informe de Diseño del Proyecto}
 \author{Claudia Hernández Pérez \and Joel Aparicio Tamayo}
@@ -82,15 +87,15 @@ El sistema implementa una arquitectura de procesos especializados que se dividen
 \begin{itemize}
     \item \textbf{Procesos del gestor}:
     \begin{itemize}
-        \item \textbf{Servidor \textit{Flask}}: Proceso que expone APIs REST para autenticación, registro, resolución de direcciones \texttt{IP}, entre otras solicitudes.
+        \item \textbf{Servidor \textit{Flask}}: Proceso que expone \texttt{API REST} para autenticación, registro, resolución de direcciones \texttt{IP}, entre otras solicitudes.
         \item \textbf{\textit{Worker} de verificación}: Proceso periódico con APScheduler que monitorea los usuarios inactivos del sistema y actualiza su estado a \textit{offline}.
-        \item \textbf{Servidor \texttt{UDP}}: Proceso que mantiene un socket UDP abierto para descubrimiento alternativo de gestores.
+        \item \textbf{Servidor \texttt{UDP}}: Proceso que mantiene un \texttt{socket UDP} abierto para descubrimiento alternativo de gestores.
     \end{itemize}
     
     \item \textbf{Procesos del cliente}:
     \begin{itemize}
         \item \textbf{Interfaz Streamlit}: Proceso que renderiza la interfaz gráfica y gestiona la interacción del usuario.
-        \item \textbf{Servidor \textit{Flask}}: Proceso que expone APIs REST para comunicación entre clientes.
+        \item \textbf{Servidor \textit{Flask}}: Proceso que expone \texttt{API REST} para comunicación entre clientes.
         \item \textbf{\textit{Worker} para tareas pendientes}: Tareas programadas con APScheduler para gestionar mensajes o actualizaciones de estado pendientes.
         \item \textbf{Servicio de mensajería}: Componente que establece conexiones directas con otros clientes para envío de mensajes.
         \item \textbf{Servicio para comunicación con gestores}: Componente encargado del descubrimiento inicial de gestores, así como de todas las solicitudes que les envían los clientes.
@@ -108,8 +113,6 @@ Los procesos del sistema se agrupan en las dos categorías ya conocidas. Cada un
         \item \textbf{Procesos independientes en segundo plano}: \textit{Worker} de verificación y servidor \texttt{UDP}.
     \end{itemize}
 
-        En el gestor, los procesos no se comunican entre sí.
-    
     \item \textbf{Organización de procesos del cliente}:
     \begin{itemize}
         \item \textbf{Proceso principal}: Interfaz de \textit{Streamlit}. Cada vez que se renderiza, se emplea el componente de comunicación con gestores para enviar señales de vida y obtener el listado de clientes activos. Con las interacciones del usuario se utiliza, además, el servicio de mensajería para comunicarse.
@@ -133,14 +136,78 @@ El sistema implementa \textbf{concurrencia basada en hilos} bajo el modelo \text
 
 
 \section{Comunicación}
-\subsection{Protocolos utilizados}
-La comunicación entre componentes utiliza HTTP(S) sobre la red overlay (en la implementación actual se usan peticiones HTTP simples con la librería \texttt{requests}). Para descubrimiento en la red local se usa UDP broadcast en \path{udp_discovery.py}.
 
-\subsection{Patrones de interacción}
-- Cliente \textless-\textgreater Identity Manager: peticiones REST (REQ-REP) para registrar, autenticar, consultar usuarios y enviar heartbeat (implementado en \texttt{ApiHandlerService}).
-- Cliente \textless-\textgreater Cliente: los clientes exponen un servidor HTTP (Flask) para recibir mensajes y recibos. El remitente realiza una petición POST a \path{/receive_message} del receptor.
-- Descubrimiento: UDP broadcast/response para detectar managers disponibles.
+La comunicación es uno de los pilares fundamentales en los sistemas distribuidos, permitiendo la interacción y coordinación entre componentes dispersos en diferentes nodos de red. En este tipo de sistemas, los procesos deben intercambiar información de manera confiable y eficiente, a pesar de las limitaciones inherentes de la red como latencia, pérdida de paquetes y fallos parciales. La elección adecuada de los mecanismos de comunicación determina en gran medida el desempeño, escalabilidad y confiabilidad del sistema como un todo.
 
+\subsection{Tipos de comunicación}
+\textit{Telegraph} utiliza dos tipos de comunicación fundamentales:
+
+\begin{itemize}
+    \item \textbf{\texttt{API REST}}: Utilizado como mecanismo principal para la comunicación. Permite ejecutar acciones sobre la base de datos a partir de solicitudes.
+    \item \textbf{\texttt{Sockets UDP}}: Implementado como mecanismo de descubrimiento de servicios alternativo.
+\end{itemize}
+
+\subsection{Comunicación cliente-servidor}
+La comunicación cliente-servidor se basa en el patrón \textbf{solicitud-respuesta} (\textit{request-reply}) donde el cliente envía un mensaje de solicitud al servidor (gestor u otro cliente), que recibe y procesa la solicitud, devolviendo finalmente un mensaje de respuesta. En \hyperref[tab:tipos-comunicacion]{Tabla 1} se pueden apreciar ejemplos de la implementación.
+
+\begin{table}[h]
+\centering
+\label{tab:tipos-comunicacion}
+\begin{tabular}{|p{3cm}|p{5.5cm}|p{5.5cm}|}
+\hline
+\textbf{Tipo} & \textbf{Solicitud del Cliente} & \textbf{Respuesta del Servidor} \\
+\hline
+\multirow{14}{*}{\textbf{API REST}} 
+& \url{/login}, method=[POST], content=\{username, password, ip, port\} & \texttt{CG}
+
+\{"message": "Login exitoso", "status": 200\} \\
+\cline{2-3}
+
+& \url{/users/<username>}, method=[GET] & \texttt{CG}
+
+\{"message": \{...\}, "status": 200\} \\
+\cline{2-3}
+
+& \url{/heartbeat}, method=[POST], 
+
+content=\{username\} & \texttt{CG} 
+
+\{"message": "heartbeat recibido", "status": 200\} \\
+\cline{2-3}
+
+& \url{/users/reconnect/<ip>/<username>}, method=[PUT] & \texttt{CG}
+
+\{"message": `IP actualizada exitosamente', "status": 200\} \\
+\cline{2-3}
+
+& \url{/notify\_read}, method=[POST], 
+
+content=\{from, to\} & \texttt{CC}
+
+\{"marked": count\}, 200 \\
+\cline{2-3}
+
+& POST \url{/receive\_message}, method=[POST],
+
+content=\{from, to, text\} & \texttt{CC}
+
+\{"status": `ok'\}, 200 \\
+\cline{2-3}
+\hline
+\multirow{1}{*}{\textbf{Socket UDP}}
+& \{`action': `discover'\} & \{`status': `active'\} \\
+\hline
+\end{tabular}
+
+\caption{Comunicación cliente-servidor. \texttt{CC} denota la comunicación entre clientes (uno actuando como servidor) y \texttt{CG} la comunicación del cliente con el gestor}
+\end{table}
+
+\subsection{Comunicación servidor-servidor}
+\dots
+
+\subsection{Comunicación entre procesos}
+En el sistema, cada nodo (gestor o cliente) ejecuta un proceso principal y varios procesos independientes en segundo plano. Como todos los componentes se ejecutan como hilos dentro del mismo espacio de memoria, la interacción entre ellos se realiza mediante acceso directo a objetos compartidos, por lo que sí se maneja coordinación, sin embargo, 
+\textbf{no existe comunicación entre procesos en el mismo nodo},
 \section{Coordinación}
 La coordinación se realiza principalmente mediante:
 - Estados con sello temporal: los usuarios registran \texttt{last\_seen} en \texttt{AuthService.update\_last\_seen} y el identity manager utiliza ese campo para decidir inactividad.
