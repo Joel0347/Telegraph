@@ -5,6 +5,32 @@
 \usepackage{hyperref}
 \usepackage{geometry}
 \usepackage{multirow}
+\usepackage{listings}
+\usepackage{xcolor}
+
+% Definir colores
+\definecolor{codegreen}{rgb}{0.1,0.4,0.1}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+% Definir lenguaje JSON
+\lstdefinelanguage{json}{
+    basicstyle=\ttfamily\footnotesize,
+    numbers=left,
+    numberstyle=\tiny\color{codegray},
+    backgroundcolor=\color{backcolour},
+    showspaces=false,
+    showstringspaces=false,
+    breaklines=true,
+    frame=single,
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{blue},
+    stringstyle=\color{codepurple},
+    morecomment=[s][\color{codegreen}]{/*}{*/},
+    morestring=[b]",
+    morestring=[d]"
+}
 \addto\captionsspanish{
   \renewcommand{\listtablename}{Índice de tablas}
   \renewcommand{\tablename}{Tabla}
@@ -209,13 +235,73 @@ content=\{from, to, text\} & \texttt{CC}
 En el sistema, cada nodo (gestor o cliente) ejecuta un proceso principal y varios procesos independientes en segundo plano. Como todos los componentes se ejecutan como hilos dentro del mismo espacio de memoria, la interacción entre ellos se realiza mediante acceso directo a objetos compartidos, por lo que sí se maneja coordinación, sin embargo, 
 \textbf{no existe comunicación entre procesos en el mismo nodo},
 \section{Coordinación}
-La coordinación se realiza principalmente mediante:
-- Estados con sello temporal: los usuarios registran \texttt{last\_seen} en \texttt{AuthService.update\_last\_seen} y el identity manager utiliza ese campo para decidir inactividad.
-- Heartbeats: los clientes envían latidos periódicos con \texttt{ApiHandlerService.send\_heart\_beat} y el manager actualiza \texttt{last\_seen}.
-- Jobs de mantenimiento: \texttt{check\_inactive\_users} en el identity manager marca usuarios offline y fuerza desconexiones cuando procede.
+\dots
+\section{Nombrado y Localización}
 
-\section{Nombrado y localización}
-Los recursos (usuarios) se nombran por \texttt{username}. La localización se resuelve consultando el identity manager mediante \path{/users/<username>} y obteniendo \texttt{ip} y \texttt{port}. El cliente también mantiene un pequeño repositorio local (\texttt{ClientRepository}) que guarda el nombre de usuario en \path{.env} dentro del directorio de datos.
+
+La identificación y localización de recursos constituye uno de los desafíos fundamentales en el diseño de sistemas distribuidos. En un entorno donde los componentes están físicamente dispersos a través de múltiples nodos de red, es esencial contar con mecanismos que permitan a los procesos encontrar y acceder de manera eficiente a los servicios y datos que necesitan para operar. 
+
+\subsection{Identificación de los datos y servicios}
+
+El sistema almacena dos tipos de información:
+\begin{itemize}
+    \item \textbf{Usuarios}: Se identifican por el campo \texttt{username} único para cada usuario.
+        \begin{lstlisting}[language=json, breaklines=False, basicstyle=\scriptsize \ttfamily]
+{
+  "username": "alice",
+  "password": "$2b$12$LQv3c1yqBWVHxkd0g8f7QuYKThbMvOoiuTM.ZlbzOnY9qU8pMq.LK",
+  "ip": "192.168.1.150",
+  "port": 8000,
+  "status": "online", /* puede ser "offline" tambien */
+  "last_seen": "2025-11-15T14:30:25.123456Z"
+}
+        \end{lstlisting}
+    \item \textbf{Mensajes}: Se identifican por la llave \texttt{(from, to, timestamp)} única por mensaje.
+        \begin{lstlisting}[language=json,basicstyle=\ttfamily\scriptsize, breaklines=false]
+{
+  "from": "alice",
+  "to": "bob",
+  "text": "Aprobamos Distribuidos",
+  "timestamp": "2025-11-15T16:45:30.789123Z",
+  "read": false,
+  "status": "ok" /* puede ser "pending" tambien */
+}
+\end{lstlisting}
+
+\end{itemize}
+
+Además de datos, es posible identificar nodos y servicios:
+\begin{itemize}
+    \item \textbf{Gestores}: Todos poseen el mismo alias en la red: \texttt{identity-manager}; aunque cada uno tiene su propia dirección \texttt{IP}.
+    \item \textbf{Clientes}: Guardan su dirección \texttt{IP} en los datos del usuario conectado desde ese nodo.
+    \item \textbf{Servicios \texttt{REST}}: Se identifican por una \textit{url}: \url{Node_IP:Puerto/endpoint}. Cada funcionalidad se expone mediante \textit{endpoints} específicos como \texttt{/login}, \texttt{/register}, \texttt{/peers}, \texttt{/receive\_message}, etc.
+\end{itemize}
+
+\subsection{Ubicación de los datos y servicios}
+
+Los datos del sistema se almacenan en archivos \texttt{.json} distribuidos de la siguiente manera:
+
+\begin{itemize}
+    \item \textbf{Datos de Usuarios}: Almacenados localmente en cada gestor.
+    \item \textbf{Mensajes}: Almacenados localmente en los clientes que intervienen en la conversación.
+\end{itemize}
+
+Los servicios \texttt{REST} se distribuyen de la siguiente forma:
+\begin{itemize}
+    \item \textbf{Servicios de Gestores}: Desplegados con puerto fijo 8000.
+    \item \textbf{Servicios de Clientes}: Desplegados en un puerto dinámico, por defecto: 8000.
+\end{itemize}
+
+\subsection{Localización de los datos y servicios}
+
+Los nodos del sistema implementan dos mecanismos de descubrimiento de gestores, evitando depender de un único servicio que, eventualmente, podría fallar.
+
+\begin{itemize}
+    \item \textbf{Descubrimiento Primario}: Todos los gestores tienen el mismo alias, que se utiliza para solicitar al \textbf{DNS} de \textit{Docker} todas las direcciones \texttt{IP} registradas con ese nombre.
+    \item \textbf{Descubrimiento Secundario}: Como mecanismo de \textit{fallback}, los clientes escanean un rango de \texttt{IP} predefinido cuando el \textbf{DNS} de \textit{Docker} no está disponible. Luego, envían a cada dirección un mensaje vía \texttt{socket} al puerto \texttt{UDP} en el que se encuentren escuhando los gestores, por defecto: 5353.
+\end{itemize}
+
+Los clientes entre sí no necesitan descubrirse unos a otros. Por la arquitectura propuesta, los clientes consultan a los gestores mediante \texttt{GET /users/<username>} para obtener la dirección \texttt{IP} y el puerto del servicio \texttt{REST} de cualquier otro. En caso de que los clientes cambien de dirección \texttt{IP} por alguna desconexión y reconexión de la red, notifican cambios de ubicación mediante \texttt{PUT /users/reconnect/<ip>/<username>} en cuanto se activen nuevamente.
 
 \section{Consistencia y replicación}
 La implementación actual no incorpora replicación distribuida ni un anillo Chord. En su lugar se aplica una persistencia local en cada cliente (archivos JSON) y un registro centralizado de usuarios en el identity manager (fichero JSON \path{/data/users.json}).
