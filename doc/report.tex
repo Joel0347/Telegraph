@@ -235,7 +235,66 @@ content=\{from, to, text\} & \texttt{CC}
 En el sistema, cada nodo (gestor o cliente) ejecuta un proceso principal y varios procesos independientes en segundo plano. Como todos los componentes se ejecutan como hilos dentro del mismo espacio de memoria, la interacción entre ellos se realiza mediante acceso directo a objetos compartidos, por lo que sí se maneja coordinación, sin embargo, 
 \textbf{no existe comunicación entre procesos en el mismo nodo},
 \section{Coordinación}
-\dots
+\label{sec:coordinacion}
+
+La coordinación en sistemas distribuidos aborda el desafío de lograr que múltiples componentes independientes trabajen de manera consistente y organizada. En un entorno donde los procesos ejecutan concurrentemente en diferentes nodos, es esencial establecer mecanismos que sincronicen acciones, gestionen el acceso a recursos compartidos y permitan la toma de decisiones colectivas. Esta sección detalla las estrategias de coordinación implementadas en el sistema de mensajería distribuida.
+
+\subsection{Sincronización de acciones}
+\label{subsec:sincronizacion-acciones}
+
+El sistema implementa varios mecanismos de sincronización para coordinar acciones entre componentes distribuidos:
+
+\begin{itemize}
+    \item \textbf{Heartbeats y Monitoreo de Estado}: Los clientes envían periódicamente mensajes de heartbeat a los gestores, permitiendo sincronizar el estado de conexión de todos los usuarios en el sistema.
+    
+    \item \textbf{Sincronización de Confirmaciones de Lectura}: Mediante el endpoint \texttt{/notify\_read}, el sistema sincroniza el estado de lectura de mensajes entre emisor y receptor, garantizando que ambos tengan una visión consistente.
+    
+    \item \textbf{Actualización Coordinada de Estado}: Cuando un gestor detecta que un usuario ha excedido el timeout de inactividad, notifica al cliente mediante \texttt{POST /disconnect} para sincronizar el estado en ambos extremos.
+    
+    \item \textbf{Replicación con Raft}: Los gestores utilizan el algoritmo de consenso Raft para sincronizar operaciones críticas, asegurando que todos los nodos repliquen las mismas acciones en el mismo orden.
+\end{itemize}
+
+\subsection{Acceso exclusivo a recursos. Condiciones de carrera}
+\label{subsec:acceso-exclusivo-recursos}
+
+Para prevenir condiciones de carrera y garantizar el acceso exclusivo a recursos compartidos, el sistema implementa:
+
+\begin{itemize}
+    \item \textbf{Bloqueos en Base de Datos}: Los gestores utilizan mecanismos de locking a nivel de base de datos para garantizar que operaciones concurrentes sobre el mismo usuario (login, logout, actualización de estado) se ejecuten atómicamente.
+    
+    \item \textbf{Sincronización en Memoria Compartida}: Dentro de cada proceso (gestor o cliente), los múltiples hilos coordinan el acceso a estructuras de datos compartidas mediante locks y mutex, previniendo condiciones de carrera en:
+    \begin{itemize}
+        \item Acceso a la lista de usuarios conectados
+        \item Procesamiento de mensajes entrantes
+        \item Actualización de estados de mensajes
+    \end{itemize}
+    
+    \item \textbf{Exclusión Mutua Distribuida}: En la implementación de Raft, solo el líder puede procesar operaciones de escritura, actuando como un mecanismo de exclusión mutua distribuido para operaciones críticas.
+    
+    \item \textbf{Serialización de Operaciones}: El sistema garantiza que operaciones conflictivas sobre el mismo recurso (ej: múltiples login del mismo usuario) se serialicen correctamente.
+\end{itemize}
+
+\subsection{Toma de decisiones distribuidas}
+\label{subsec:toma-decisiones-distribuidas}
+
+El sistema emplea varios mecanismos para la toma de decisiones en un entorno distribuido:
+
+\begin{itemize}
+    \item \textbf{Algoritmo de Consenso Raft}: Los gestores utilizan Raft para tomar decisiones colectivas sobre:
+    \begin{itemize}
+        \item Elección del líder que coordinará las operaciones
+        \item Compromiso de operaciones en el log distribuido
+        \item Gestión de membresía del cluster
+    \end{itemize}
+    
+    \item \textbf{Descubrimiento de Servicios}: Los clientes implementan un mecanismo de votación implícita mediante UDP broadcast, donde múltiples gestores pueden responder y el cliente selecciona el más adecuado.
+    
+    \item \textbf{Decisión de Rutas de Mensajería}: El sistema decide automáticamente la ruta óptima para entregar mensajes, consultando a los gestores para obtener la ubicación actual de los destinatarios.
+    
+    \item \textbf{Resolución de Conflictos de Estado}: Cuando se detectan estados inconsistentes (ej: usuario marcado como offline pero enviando mensajes), el sistema toma decisiones basadas en timestamps y mecanismos de heartbeat para resolver la inconsistencia.
+\end{itemize}
+
+Estos mecanismos de coordinación permiten que el sistema distribuido funcione como una entidad cohesiva, manteniendo la consistencia y confiabilidad a pesar de la naturaleza descentralizada de sus componentes.
 \section{Nombrado y Localización}
 
 
@@ -303,10 +362,39 @@ Los nodos del sistema implementan dos mecanismos de descubrimiento de gestores, 
 
 Los clientes entre sí no necesitan descubrirse unos a otros. Por la arquitectura propuesta, los clientes consultan a los gestores mediante \texttt{GET /users/<username>} para obtener la dirección \texttt{IP} y el puerto del servicio \texttt{REST} de cualquier otro. En caso de que los clientes cambien de dirección \texttt{IP} por alguna desconexión y reconexión de la red, notifican cambios de ubicación mediante \texttt{PUT /users/reconnect/<ip>/<username>} en cuanto se activen nuevamente.
 
-\section{Consistencia y replicación}
-La implementación actual no incorpora replicación distribuida ni un anillo Chord. En su lugar se aplica una persistencia local en cada cliente (archivos JSON) y un registro centralizado de usuarios en el identity manager (fichero JSON \path{/data/users.json}).
+\section{Consistencia y Replicación}
 
-Consecuencia: no hay tolerancia a particiones en lo que respecta al registro de usuarios; si el manager que contiene el fichero de usuarios deja de estar disponible, los clientes solo pueden actuar con la información cacheada localmente o hasta que descubran otro manager.
+En sistemas distribuidos, la replicación de datos es una técnica fundamental para mejorar la disponibilidad, confiabilidad y rendimiento. Al mantener múltiples copias de los mismos datos en diferentes nodos, los sistemas pueden ofrecer acceso continuo incluso ante fallos parciales, reducir la latencia mediante la ubicación estratégica de réplicas cercanas a los usuarios, y distribuir la carga de trabajo para soportar un mayor número de peticiones concurrentes. Esta capacidad de replicar información de manera confiable transforma sistemas frágiles en infraestructuras resilientes capaces de operar ininterrumpidamente en entornos distribuidos complejos.
+
+\subsection{Distribución de los datos}
+
+El sistema maneja dos tipos de datos que se distribuyen de la siguiente manera:
+
+\begin{itemize}
+    \item \textbf{Datos de usuarios}: Distribuidos entre los gestores mediante replicación completa en todas las réplicas.
+    
+    \item \textbf{Mensajes}: Cada cliente almacena localmente los mensajes que ha enviado y recibido.
+\end{itemize}
+
+\subsection{Replicación, cantidad de réplicas}
+
+El sistema implementa un esquema de replicación configurable según los requisitos de disponibilidad. Como la toma de decisiones se basa en consenso, para lograr una tolerancia a fallas $K$ se necesitan al menos 2$K$ + 1 réplicas de los datos.
+
+Suponiendo que existen $N$ nodos físicos en la red de \textit{Docker Swarm}, para lograr que, ante problemas de red, cada nodo sea tolerante a $K-1$ fallas, se necesita en cada uno al menos $2(K - 1) + 1 = 2K-1$ réplicas, por lo que en total en el sistema se requieren $N(2K - 1)$.
+
+En particular, para lograr la tolerancia requerida inicialmente $K=2$ con dos nodos en la red de \textit{Swarm}, se necesitan $2(2*2 - 1)=6$ réplicas, 3 en cada nodo físico.
+
+\subsection{Confiabilidad de las réplicas de los datos}
+
+Los datos que se replican en el sistema son los de los usuarios. Lograr que las réplicas sean confiables luego de una actualización es una ardua tarea, la cual llevamos a cabo de la siguiente manera:
+
+\begin{itemize}
+    \item \textbf{Solicitud al líder}: Los clientes envían todas sus peticiones al gestor que funciona como líder según \textbf{RAFT}. El líder es el único que realiza operaciones críticas sobre los datos con sus tareas en segundo plano.
+    \item \textbf{Petición de consenso}: Antes de tomar acción sobre los datos, el líder convoca al resto de gestores. Si la mayoría responde, se lleva a cabo la acción, si no, queda invalidada.
+    \item \textbf{Propagación de la solicitud}: Si se logra el consenso, el líder ejecuta la acción y propaga la solicitud a todos los \textit{followers}. Estos solo ejecutan la acción si su \textit{term} es menor que el \textit{term} del líder, que se envía junto con la solicitud.
+\end{itemize}
+
+De esta manera las réplicas son confiables, ya que todas se actualizan en cada operación, sin generar pérdida de datos, quedando todas exactamente iguales.
 
 \section{Tolerancia a fallos}
 Medidas actuales:
@@ -318,37 +406,21 @@ Limitaciones:
 - No existe replicación de la base de datos de usuarios ni de los mensajes a otros gestores; la tolerancia a fallos está limitada a la disponibilidad de los ficheros JSON del manager y de los propios clientes.
 
 \section{Seguridad}
-\subsection{Autenticación y contraseñas}
-Las contraseñas de los usuarios se hashean con bcrypt (\texttt{AuthService.hash\_password}) antes de almacenarlas en el repositorio de usuarios (\texttt{UserRepository} guarda datos en JSON en \path{/data/users.json}). La verificación se realiza con \texttt{checkpw}.
 
-\subsection{Canales y cifrado}
-En la versión actual no hay cifrado de transporte (no hay TLS configurado en las peticiones HTTP internas). Esto es una área prioritaria de mejora: se recomienda habilitar HTTPS entre managers y clientes y/o establecer túneles VPN / mTLS en despliegues reales.
+La seguridad en sistemas distribuidos representa un desafío multidimensional que abarca desde la protección de las comunicaciones en tránsito hasta la correcta implementación de mecanismos de control de acceso. En un entorno donde los componentes están dispersos a través de redes potencialmente inseguras, es fundamental establecer estrategias defensivas que protejan la confidencialidad, integridad y disponibilidad de los recursos del sistema.
 
-\subsection{Consideraciones adicionales}
-- Validación básica de payloads en endpoints Flask.
-- No hay control de acceso granular ni lista blanca de managers; cualquiera que responda al discovery UDP puede ser usado por clientes si le han descubierto.
+\subsection{Seguridad con respecto a la comunicación}
 
-\section{Conclusiones y trabajo futuro}
-La implementación actual es una prueba de concepto funcional que cubre:
-- Registro, login y localización de usuarios mediante un \textit{identity manager} ligero.
-- Intercambio directo de mensajes entre clientes mediante HTTP y persistencia local de mensajes.
-- Mecanismos básicos de disponibilidad (heartbeat, detección de inactividad, reintentos de envío).
+En la versión actual no hay cifrado de transporte (no hay TLS configurado en las peticiones HTTP internas). Esto es una área prioritaria de mejora.
 
-Mejoras recomendadas:
-- Implementar replicación y tolerancia a fallos entre gestores (por ejemplo, un anillo Chord o replicación maestro-esclavo para \path{users.json}).
-- Asegurar canales con TLS/mTLS y proteger el UDP discovery.
-- Añadir pruebas automáticas y scripts de despliegue reproducible.
+\subsection{Seguridad con respecto al diseño}
 
-\newpage
-\section*{Apéndice: Referencias a código}
-Se listan los ficheros más relevantes y su propósito:
-- \path{src/client/app/main.py}: UI Streamlit y arranque de servicios.
-- \path{src/client/app/server.py}: servidor Flask del cliente (endpoints para recibir mensajes y recibos).
-- \path{src/client/app/background_tasks.py}: loop de sincronización y reintentos.
-- \path{src/client/app/services/}: lógica de negocio cliente (API handler, client info, message service).
-- \path{src/client/app/repositories/}: persistencia local (mensajes, usuario local).
-- \path{src/identity-manager/app/api.py}: server REST del manager.
-- \path{src/identity-manager/app/udp_discovery.py}: discovery por UDP.
-- \path{src/identity-manager/app/services/auth_service.py}: autenticación y gestión de usuarios.
+La aplicación utiliza una arquitectura \textbf{P2P} donde los mensajes nunca pasan ni se almacenan en un gestor centralizado. Esto protege la privacidad y asegura que solo el usuario pueda acceder a su historial de mensajes.
+
+\subsection{Autorización y autenticación}
+
+Las sesiones están protegidas mediante un nombre de usuario único y una contraseña cifrada almacenada por los gestores, garantizando autenticación y autorización seguras.
+Las contraseñas se hashean con \texttt{bcrypt} antes de almacenarlas en el repositorio de usuarios. La verificación se realiza con \texttt{checkpw}.
+
 
 \end{document}
