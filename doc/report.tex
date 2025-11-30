@@ -7,6 +7,7 @@
 \usepackage{multirow}
 \usepackage{listings}
 \usepackage{xcolor}
+\usepackage{float}
 
 % Definir colores
 \definecolor{codegreen}{rgb}{0.1,0.4,0.1}
@@ -115,6 +116,8 @@ El sistema implementa una arquitectura de procesos especializados que se dividen
     \begin{itemize}
         \item \textbf{Servidor \textit{Flask}}: Proceso que expone \texttt{API REST} para autenticación, registro, resolución de direcciones \texttt{IP}, entre otras solicitudes.
         \item \textbf{\textit{Worker} de verificación}: Proceso periódico con APScheduler que monitorea los usuarios inactivos del sistema y actualiza su estado a \textit{offline}.
+        \item \textbf{\textit{Worker} de elección}: Proceso que se ejecuta cuando se agota el \textit{timeout} sin notificaciones del líder, convocando a una elección.
+        \item \textbf{\textit{Worker} para \textit{heartbeats}}: Proceso solo ejecutado por el gestor líder, que se encarga de notificar al resto de su existencia periódicamente.
         \item \textbf{Servidor \texttt{UDP}}: Proceso que mantiene un \texttt{socket UDP} abierto para descubrimiento alternativo de gestores.
     \end{itemize}
     
@@ -136,7 +139,7 @@ Los procesos del sistema se agrupan en las dos categorías ya conocidas. Cada un
     \item \textbf{Organización de procesos del gestor}:
     \begin{itemize}
         \item \textbf{Proceso principal}: Servidor \textit{Flask}
-        \item \textbf{Procesos independientes en segundo plano}: \textit{Worker} de verificación y servidor \texttt{UDP}.
+        \item \textbf{Procesos independientes en segundo plano}: \textit{Worker} de verificación, \newline \textit{Worker} de elección, \textit{Worker} para \textit{heartbeats} y servidor \texttt{UDP}.
     \end{itemize}
 
     \item \textbf{Organización de procesos del cliente}:
@@ -148,18 +151,11 @@ Los procesos del sistema se agrupan en las dos categorías ya conocidas. Cada un
 
 \subsection{Tipo de patrón de diseño con respecto al desempeño}
 
-El sistema implementa \textbf{concurrencia basada en hilos} bajo el modelo \textbf{Many-to-One}:
-
-\begin{itemize}
-    \item \textbf{Hilos especializados}: Diferentes componentes ejecutan en hilos separados dentro del mismo proceso:
-        \begin{itemize}
-            \item \textbf{cliente}: El proceso principal es el que ejecuta la interfaz gráfica de \textit{Streamlit}. De él se desprenden dos hilos: uno para el \textit{APScheduler} encargado de las tareas pendientes y otro para el servidor de \textit{Flask}. El resto de tareas se ejecutan en el proceso principal.
-            \item \textbf{gestor}: El proceso principal es el que ejecuta el servidor de \textit{Flask}. De él se desprenden dos hilos: uno para el \textit{APScheduler} encargado de detectar usuarios inactivos y otro para el servidor \texttt{UDP}.
-        \end{itemize}
-    
-    \item \textbf{Hilo por solicitud}: Los servidores \textit{Flask} con \texttt{threaded=True} implementan este patrón para manejar múltiples solicitudes \texttt{HTTP} concurrentemente.
-\end{itemize}
-
+El sistema implementa \textbf{concurrencia basada en hilos} bajo el modelo \textbf{Many-to-One}. Diferentes componentes ejecutan en hilos separados dentro del mismo proceso:
+    \begin{itemize}
+        \item \textbf{cliente}: El proceso principal es el que ejecuta la interfaz gráfica de \textit{Streamlit}. De él se desprenden dos hilos: uno para el \textit{APScheduler} encargado de las tareas pendientes y otro para el servidor de \textit{Flask}. El resto de tareas se ejecutan en el proceso principal.
+        \item \textbf{gestor}: El proceso principal es el que ejecuta el servidor de \textit{Flask}. De él se desprenden cuatro hilos: uno para el \textit{APScheduler} encargado de detectar usuarios inactivos, uno para convocar a elecciones, uno para que el líder notifique de su existencia y otro para el servidor \texttt{UDP}.
+    \end{itemize}
 
 \section{Comunicación}
 
@@ -171,6 +167,7 @@ La comunicación es uno de los pilares fundamentales en los sistemas distribuido
 \begin{itemize}
     \item \textbf{\texttt{API REST}}: Utilizado como mecanismo principal para la comunicación. Permite ejecutar acciones sobre la base de datos a partir de solicitudes.
     \item \textbf{\texttt{Sockets UDP}}: Implementado como mecanismo de descubrimiento de servicios alternativo.
+    \item \textbf{\texttt{RPC}}: Utilizado en la comunicación entre gestores para sincronizar \textit{logs}. Permite que el líder notifique al resto de gestores las funciones que deben ejecutar sobre los datos junto con sus argumentos.
 \end{itemize}
 
 \subsection{Comunicación cliente-servidor}
@@ -229,72 +226,146 @@ content=\{from, to, text\} & \texttt{CC}
 \end{table}
 
 \subsection{Comunicación servidor-servidor}
-\dots
+La comunicación servidor-servidor también se basa en el patrón \textbf{solicitud-respuesta} (\textit{request-reply}). En \hyperref[tab:tipos-comunicacion-2]{Tabla 2} se pueden apreciar ejemplos de la implementación.
+
+\begin{table}[H]
+\centering
+\label{tab:tipos-comunicacion-2}
+\begin{tabular}{|p{3cm}|p{5.5cm}|p{5.5cm}|}
+\hline
+\textbf{Tipo} & \textbf{Gestor líder} & \textbf{Resto de gestores} \\
+\hline
+\multirow{1}{*}{\textbf{API REST}} 
+& \url{/request-vote}, method=[POST], content=\{term, ip, 
+
+last\_log\_index, last\_log\_term\} & 
+\{term: ..., 
+
+vote\_granted: True\} \\
+\cline{2-3}
+
+\hline
+\multirow{1}{*}{\textbf{RPC}}
+& \{op: ..., args: {...}\} & \{term: ..., success: True\} \\
+\hline
+\end{tabular}
+
+\caption{Comunicación servidor-servidor}
+\end{table}
 
 \subsection{Comunicación entre procesos}
 En el sistema, cada nodo (gestor o cliente) ejecuta un proceso principal y varios procesos independientes en segundo plano. Como todos los componentes se ejecutan como hilos dentro del mismo espacio de memoria, la interacción entre ellos se realiza mediante acceso directo a objetos compartidos, por lo que sí se maneja coordinación, sin embargo, 
 \textbf{no existe comunicación entre procesos en el mismo nodo},
 \section{Coordinación}
-\label{sec:coordinacion}
 
-La coordinación en sistemas distribuidos aborda el desafío de lograr que múltiples componentes independientes trabajen de manera consistente y organizada. En un entorno donde los procesos ejecutan concurrentemente en diferentes nodos, es esencial establecer mecanismos que sincronicen acciones, gestionen el acceso a recursos compartidos y permitan la toma de decisiones colectivas. Esta sección detalla las estrategias de coordinación implementadas en el sistema de mensajería distribuida.
+La coordinación en sistemas distribuidos aborda el desafío de lograr que múltiples componentes independientes trabajen de manera consistente y organizada. En un entorno donde los procesos se ejecutan concurrentemente en diferentes nodos, es esencial establecer mecanismos que sincronicen acciones, gestionen el acceso a recursos compartidos y permitan la toma de decisiones colectivas.
 
 \subsection{Sincronización de acciones}
-\label{subsec:sincronizacion-acciones}
 
-El sistema implementa varios mecanismos de sincronización para coordinar acciones entre componentes distribuidos:
+El sistema se basa en varios mecanismos de sincronización para coordinar acciones entre componentes distribuidos:
 
 \begin{itemize}
-    \item \textbf{Heartbeats y Monitoreo de Estado}: Los clientes envían periódicamente mensajes de heartbeat a los gestores, permitiendo sincronizar el estado de conexión de todos los usuarios en el sistema.
+    \item \textbf{Replicación de \textit{logs}}: el líder asegura que todos los nodos mantengan la misma secuencia de operaciones. Esto se logra mediante las propiedades \texttt{next\_index} y \texttt{match\_index}, que indican hasta qué punto 
+    cada \textit{follower} ha recibido y confirmado las entradas. Si un \textit{follower} presenta inconsistencias, el líder retrocede su 
+    \texttt{next\_index} y reenvía las entradas necesarias hasta que los \textit{logs} coincidan.
     
-    \item \textbf{Sincronización de Confirmaciones de Lectura}: Mediante el endpoint \texttt{/notify\_read}, el sistema sincroniza el estado de lectura de mensajes entre emisor y receptor, garantizando que ambos tengan una visión consistente.
+    \item \textbf{\textit{Commits}}: la sincronización no se limita a copiar entradas, sino a garantizar que solo se consideren válidas 
+    aquellas que han sido replicadas en la mayoría de nodos. El \texttt{commit\_index} marca el último punto seguro en el \textit{log}, 
+    asegurando que las operaciones no se pierdan aunque el líder falle. Este mecanismo es el que da consistencia fuerte al sistema.
     
-    \item \textbf{Actualización Coordinada de Estado}: Cuando un gestor detecta que un usuario ha excedido el timeout de inactividad, notifica al cliente mediante \texttt{POST /disconnect} para sincronizar el estado en ambos extremos.
-    
-    \item \textbf{Replicación con Raft}: Los gestores utilizan el algoritmo de consenso Raft para sincronizar operaciones críticas, asegurando que todos los nodos repliquen las mismas acciones en el mismo orden.
+    \item \textbf{Ejecución ordenada de operaciones}: El uso de índices (\texttt{last\_applied}) garantiza que las operaciones se apliquen en el mismo orden en todos los nodos, 
+    evitando divergencias en el estado interno.
 \end{itemize}
 
 \subsection{Acceso exclusivo a recursos. Condiciones de carrera}
-\label{subsec:acceso-exclusivo-recursos}
 
-Para prevenir condiciones de carrera y garantizar el acceso exclusivo a recursos compartidos, el sistema implementa:
-
-\begin{itemize}
-    \item \textbf{Bloqueos en Base de Datos}: Los gestores utilizan mecanismos de locking a nivel de base de datos para garantizar que operaciones concurrentes sobre el mismo usuario (login, logout, actualización de estado) se ejecuten atómicamente.
-    
-    \item \textbf{Sincronización en Memoria Compartida}: Dentro de cada proceso (gestor o cliente), los múltiples hilos coordinan el acceso a estructuras de datos compartidas mediante locks y mutex, previniendo condiciones de carrera en:
-    \begin{itemize}
-        \item Acceso a la lista de usuarios conectados
-        \item Procesamiento de mensajes entrantes
-        \item Actualización de estados de mensajes
-    \end{itemize}
-    
-    \item \textbf{Exclusión Mutua Distribuida}: En la implementación de Raft, solo el líder puede procesar operaciones de escritura, actuando como un mecanismo de exclusión mutua distribuido para operaciones críticas.
-    
-    \item \textbf{Serialización de Operaciones}: El sistema garantiza que operaciones conflictivas sobre el mismo recurso (ej: múltiples login del mismo usuario) se serialicen correctamente.
-\end{itemize}
+Para prevenir condiciones de carrera y garantizar el acceso exclusivo a recursos compartidos se utiliza un \texttt{Lock}, lo que asegura que solo un hilo acceda a la sección crítica a la vez.
 
 \subsection{Toma de decisiones distribuidas}
-\label{subsec:toma-decisiones-distribuidas}
 
-El sistema emplea varios mecanismos para la toma de decisiones en un entorno distribuido:
+El sistema utiliza el algoritmo \textbf{RAFT} para elegir un líder que tome las decisiones en el sistema basada en consenso. La \textbf{elección de líder} se desarrolla de la siguiente manera:
 
 \begin{itemize}
-    \item \textbf{Algoritmo de Consenso Raft}: Los gestores utilizan Raft para tomar decisiones colectivas sobre:
+    \item \textbf{Expiración del temporizador de elección}: 
+    Cada nodo inicia como \textit{follower}. Si no recibe mensajes de un líder válido 
+    dentro de un intervalo aleatorio (\texttt{election\_timeout}), el nodo pasa al estado 
+    de \textit{candidate}.
+    
+    \item \textbf{Incremento de término y autovoto}: 
+    El candidato incrementa su \texttt{current\_term}, se vota a sí mismo 
+    y reinicia su temporizador de elección.
+    
+    \item \textbf{Solicitud de votos}: 
+    El candidato envía mensajes solicitando votos a todos los demás nodos, 
+    incluyendo su \texttt{last\_log\_index} y \texttt{last\_log\_term} para demostrar 
+    que su log está actualizado.
+    
+    \item \textbf{Recepción de votos}: 
+    Cada nodo responde con un voto si:
     \begin{itemize}
-        \item Elección del líder que coordinará las operaciones
-        \item Compromiso de operaciones en el log distribuido
-        \item Gestión de membresía del cluster
+        \item El término del candidato es mayor o igual al suyo.
+        \item El \textit{log} del candidato está al menos tan actualizado como el suyo.
+        \item El nodo no ha votado por otro candidato en ese término.
     \end{itemize}
     
-    \item \textbf{Descubrimiento de Servicios}: Los clientes implementan un mecanismo de votación implícita mediante UDP broadcast, donde múltiples gestores pueden responder y el cliente selecciona el más adecuado.
+    \item \textbf{Mayoría alcanzada}: 
+    Si el candidato recibe votos de la mayoría de los nodos, se convierte en \textit{líder}.
+    En ese momento inicializa las variables \texttt{next\_index} y \texttt{match\_index} 
+    para cada \textit{follower}.
     
-    \item \textbf{Decisión de Rutas de Mensajería}: El sistema decide automáticamente la ruta óptima para entregar mensajes, consultando a los gestores para obtener la ubicación actual de los destinatarios.
+    \item \textbf{Heartbeats}: 
+    El nuevo líder comienza a enviar mensajes \textit{heartbeats} periódicos para:
+    \begin{itemize}
+        \item Confirmar su liderazgo.
+        \item Evitar nuevas elecciones.
+        \item Mantener sincronizados los \textit{logs} de los \textit{followers}.
+    \end{itemize}
     
-    \item \textbf{Resolución de Conflictos de Estado}: Cuando se detectan estados inconsistentes (ej: usuario marcado como offline pero enviando mensajes), el sistema toma decisiones basadas en timestamps y mecanismos de heartbeat para resolver la inconsistencia.
+    \item \textbf{Fracaso de elección}: 
+    Si el candidato no logra mayoría antes de que expire su temporizador, 
+    inicia un nuevo ciclo de elección incrementando nuevamente su término.
 \end{itemize}
 
-Estos mecanismos de coordinación permiten que el sistema distribuido funcione como una entidad cohesiva, manteniendo la consistencia y confiabilidad a pesar de la naturaleza descentralizada de sus componentes.
+Una vez que existe un líder en el sistema, todas las decisiones son tomadas por él y cuentan con la aprobación por \textbf{consenso} de los demás gestores:
+
+\begin{itemize}
+    \item \textbf{Recepción de la solicitud}: 
+    El líder recibe la petición del cliente a través del \textit{endpoint} correspondiente.
+
+    \item \textbf{Creación de entrada de \textit{log}}: 
+    El líder encapsula la operación en una nueva entrada de \textit{log} que contiene:
+    \begin{itemize}
+        \item El término actual (\texttt{current\_term}).
+        \item El índice de la entrada en el \textit{log}.
+        \item Los datos de la operación (tipo de operación y parámetros del cliente).
+    \end{itemize}
+
+    \item \textbf{Persistencia inicial}: 
+    La entrada se guarda en el archivo de \textit{log} del líder.
+
+    \item \textbf{Replicación a \textit{followers}}: 
+    El líder envía la nueva entrada a todos los \textit{followers} mediante RPC (\texttt{append\_entries}). 
+    Cada \textit{follower}:
+    \begin{itemize}
+        \item Verifica la consistencia del \textit{log}.
+        \item Persiste la nueva entrada en su propio archivo de \textit{log}.
+    \end{itemize}
+
+    \item \textbf{Confirmación de mayoría}: 
+    El líder espera respuestas de los \textit{followers}. 
+    Si la entrada es replicada en la mayoría de nodos, se considera \textbf{comprometida}.
+
+    \item \textbf{Actualización del ídice de \textit{commit}}: 
+    El líder avanza su \texttt{commit\_index} al nuevo valor y notifica a los \textit{followers} el índice comprometido.
+
+    \item \textbf{Ejecución secuencial}: 
+    Cada nodo aplica la entrada comprometida en orden secuencial.
+
+    \item \textbf{Respuesta al cliente}: 
+    Una vez aplicada la operación, el líder responde al cliente confirmando el éxito 
+    de la transacción. Si la replicación falla, se devuelve un error.
+\end{itemize}
+    
 \section{Nombrado y Localización}
 
 
@@ -376,7 +447,7 @@ El sistema maneja dos tipos de datos que se distribuyen de la siguiente manera:
     \item \textbf{Mensajes}: Cada cliente almacena localmente los mensajes que ha enviado y recibido.
 \end{itemize}
 
-\subsection{Replicación, cantidad de réplicas}
+\subsection{Replicación. Cantidad de réplicas}
 
 El sistema implementa un esquema de replicación configurable según los requisitos de disponibilidad. Como la toma de decisiones se basa en consenso, para lograr una tolerancia a fallas $K$ se necesitan al menos 2$K$ + 1 réplicas de los datos.
 
@@ -396,14 +467,45 @@ Los datos que se replican en el sistema son los de los usuarios. Lograr que las 
 
 De esta manera las réplicas son confiables, ya que todas se actualizan en cada operación, sin generar pérdida de datos, quedando todas exactamente iguales.
 
-\section{Tolerancia a fallos}
-Medidas actuales:
-- Descubrimiento múltiple: \texttt{ApiHandlerService} intenta localizar managers vía DNS (resolviendo \texttt{identity-manager}) y, si falla, hace broadcast sobre la red overlay para localizar managers activos; mantiene una lista \texttt{api\_urls} y reintenta peticiones a diferentes managers.
-- Reintentos y marcadores locales: \texttt{MessageService} marca mensajes como \texttt{pending} si no puede contactar al receptor, y reintenta su envío periódicamente desde las tareas en background.
-- Detección de inactividad: el identity manager marca usuarios como offline si no reciben heartbeats y fuerza desconexiones.
+\section{Tolerancia a Fallas}
 
-Limitaciones:
-- No existe replicación de la base de datos de usuarios ni de los mensajes a otros gestores; la tolerancia a fallos está limitada a la disponibilidad de los ficheros JSON del manager y de los propios clientes.
+La tolerancia a fallas es un aspecto crítico en sistemas distribuidos que garantiza la continuidad del servicio incluso cuando componentes individuales presentan un mal funcionamiento. En un entorno distribuido, donde la probabilidad de fallos aumenta con el número de componentes, es esencial diseñar mecanismos que permitan al sistema operar de manera degradada pero funcional.
+
+\subsection{Respuesta a errores}
+
+Existen diversos tipos de errores que pueden ocurrir en el sistema. En general todas las solcitudes \texttt{REST} pueden responder con mensajes de error, si ocurrió alguna excepción durante su ejecución. Para manejar esas situaciones se emplean los siguientes mecanismos:
+
+\begin{itemize}
+    \item \textbf{Reintentos}: Existen tareas en segundo plano dedicadas a reintentar el envío de solicitudes fallidas, como por ejemplo los mensajes que quedaron pendientes por la desconexión del receptor.
+    \item \textbf{\textit{Timeouts} configurables}: Definición de tiempos de espera apropiados para cada solicitud así como para detectar nodos que no notifiquen su existencia, como por ejemplo líderes o clientes caídos.
+    \item \textbf{Manejo de excepciones}: En general todo punto de fallo en el sistema está diseñado para capturar y manejar excepciones, de manera que puedan ser informadas al usuario o escritas en consola sin que se detenga el funcionamiento de la aplicación.
+\end{itemize}
+
+\subsection{Nivel de tolerancia a fallos esperado}
+
+El mecanismo de replicación implementado garantiza la escalabilidad del sistema para tolerar $K$ fallas. Sin embargo, por defecto, con las réplicas
+esperadas inicialmente se garantizará una tolerancia $K=2$. 
+
+Para poderar tolerar un $K>2$ se deberá añadir más réplicas y disponerlas según lo descrito en secciones anteriores.
+
+\subsection{Fallos parciales}
+
+El sistema puede afrontar diversas situaciones durante su funcionamiento que pueden poner a prueba su tolerancia a fallos:
+
+\begin{itemize}
+    \item \textbf{Nodos caídos temporalmente}: Se utilizan mecanismos de \textit{heartbeat} para identificar nodos caídos que no respondan. Si se cae algún cliente la aplicación no se afecta, pues el comportamiento es el mismo que si hubiese cerrado sesión, simplemente se actualiza su estado a \textit{offline}. Todo el que estuviera manteniendo una conversación con él pondrá los mensajes enviados como pendientes y se reintentarán hasta que se vuelva a conectar (si cambia de \texttt{IP} se actualiza en la base de datos). Si los gestores están correctamente replicados, si se cae uno, que no sea el líder, tampoco cambia el sistema, pues seguirá existiendo consenso entre el resto y se mantendrá el mismo funcionamiento. Si se cae el gestor líder, cuando se detecte se iniciará el proceso para elegir uno nuevo según \textbf{RAFT} y luego el sistema vuelve a estar totalmente disponible.
+    \item \textbf{Nodos que se incorporan al sistema}: Todo nodo que entre al sistema (o se reincorpore), ya sea cliente o gestor, debe utilizar los protocolos de localización descritos para encontrar a los gestores existentes. Si entra un cliente nuevo, una vez se registre tendrá su información almacenada en los gestores y podrá iniciar chats; en caso que se reincorpore, si se cayó por muy poco tiempo y en los gestores nunca se le actualizó el estado \textit{online}, entonces entra directo a la página de chat, y en otro caso debe iniciar sesión nuevamente. En el caso de gestores que entren al sistema, ya sea sin entradas en su \textit{log} (nodo nuevo) o \textit{log} desactualizado respecto al líder (reincorporación), el líder le envía las entradas faltantes desde el \texttt{next\_index} correspondiente. 
+    El nodo replica estas operaciones y actualiza su \textit{log}; luego aplica las entradas comprometidas que aún no estaban reflejadas en su 
+    base de datos, alcanzando el mismo \texttt{commit\_index} que el líder.
+    \item \textbf{Particiones de red}: Por la forma en que se replica en cada nodo físico de la red de \textit{Swarm}, una partición en la red implica para cada lado, la caída de los nodos del otro, por tanto nos encontramos en los casos descritos anteriormente. Al restablecer la red entonces el sistema queda con dos líderes, que pasan a estado \textit{candidate} para elegir un único líder. Antes de la elección ambos deben mezclar sus datos, pues al estar en lados distintos después de una partición de red, se estuvieron comportando de forma independiente. La base de datos resultante de la mezcla debe contener los datos que no fueron modificados por ambos líderes a la vez en primera instancia. Luego, de los datos con conflicto se elige una versión y se añade también a la base de datos resultante. Para resolver conflictos existen tres criterios:
+        \begin{itemize}
+            \item \textbf{Usuario está \textit{offline} en ambas versiones}: Sin pérdida de generalidad se elige cualquier de las dos. Cuando el usuario se vuelva a conectar se actualizarán sus datos si es necesario con el inicio de sesión.
+            \item \textbf{Usuario está \textit{offline} en una versión y \textit{online} en otra}: Se selecciona la versión \textit{online} teniendo en cuenta que es la que se está utilizando en el momento, por tanto se asume la más actualizada.
+            \item \textbf{Usuario está \textit{online} en ambas versiones}: Sin pérdida de generalidad se elige cualquier versión y se actualiza a \textit{offline}, notificando al usuario que: \textbf{se detectó actividad inusual en su cuenta, por razones de seguridad debe iniciar sesión nuevamente}. Luego, al iniciar sesión se actualizan los datos si es necesario.
+        \end{itemize}
+\end{itemize}
+
+Ambos candidatos ejecutan cada operación y la añaden a sus \textit{logs} para mantener el historial. De esta forma ambos quedan sincronizados. Entonces, una vez concluya la elección entre ambos candidatos, se sincronizan el resto de gestores con los \textit{logs} faltantes.
 
 \section{Seguridad}
 
