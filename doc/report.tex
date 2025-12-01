@@ -97,7 +97,7 @@ La implementación del sistema distribuido se despliega utilizando \textit{Docke
 \begin{itemize}
     \item \textbf{Balanceo de Clientes}: Los clientes \textbf{P2P} pueden desplegarse en ambos hosts (tantos como se deseen), simulando usuarios en diferentes ubicaciones de red. Lo que se recomienda es balancear entre ambos hosts físicos para sobrecargar lo menos posible cada uno.
     
-    \item \textbf{Distribución de Gestores}: Inicialmente el sistema contará con $4k - 2$ réplicas de gestores (siendo $k$ la tolerancia a fallas esperada), donde cada host contará con $2k-1$ gestores. De esta forma se garantiza que si se pierde la conexión entre ambos hosts físicos, en cada red independiente se logre una tolerancia a fallas $k-1$. Esta desición puede estra sujeta a cambios futuros.
+    \item \textbf{Distribución de Gestores}: Inicialmente el sistema contará con $4k - 2$ réplicas de gestores (siendo $k$ la tolerancia a fallas esperada), donde cada host contará con $2k-1$ gestores. De esta forma se garantiza que si se pierde la conexión entre ambos hosts físicos, en cada red independiente se logre una tolerancia a fallas $k-1$. Esta decisión puede estar sujeta a cambios futuros.
     
     \item \textbf{Descubrimiento de Servicios}: \textit{Docker Swarm} proporciona un \textbf{DNS} interno que permite a los contenedores descubrir automáticamente los servicios desplegados en la red \texttt{overlay}. Además, se cuenta con una alternativa ante posibles fallos del \textbf{DNS} que se explicará en otra sección más adelante.
 \end{itemize}
