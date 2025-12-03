@@ -4,45 +4,51 @@ from services.manager_service import ManagerService
 from repositories.user_repo import UserRepository
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta
+from typing import Dict, Any
 from requests.exceptions import RequestException, ConnectionError
 import requests, threading
 from udp_discovery import run_server
+from dispatcher import Dispatcher
 
 # devolver por defecto si no es lider: {"message": "forbidden, not leader", "status": 403}
 app = Flask(__name__)
 user_repo = UserRepository()
 auth_service = AuthService(user_repo)
-mng_service = ManagerService()
+dispatcher = Dispatcher(auth_service)
+mng_service = ManagerService(dispatcher)
 
 # -------------- CLIENT ENDPOINTS ------------------
 @app.route("/register", methods=["POST"])
 def register():
     data = request.get_json(force=True)
-    msg = auth_service.register_user(
-        username=data.get("username", ""),
-        password=data.get("password", ""),
-        ip=data.get("ip", ""),
-        port=data.get("port", 0),
-    )
-    return jsonify(msg)
+    return dispatcher.register(data)
+    # msg = auth_service.register_user(
+    #     username=data.get("username", ""),
+    #     password=data.get("password", ""),
+    #     ip=data.get("ip", ""),
+    #     port=data.get("port", 0),
+    # )
+    # return jsonify(msg)
 
 @app.route("/login", methods=["POST"])
 def login():
     data = request.get_json(force=True)
-    msg = auth_service.login_user(
-        username=data.get("username", ""),
-        password=data.get("password", ""),
-        ip=data.get("ip", ""),
-        port=data.get("port", 0),
-    )
-    return jsonify(msg)
+    return dispatcher.login(data)
+    # msg = auth_service.login_user(
+    #     username=data.get("username", ""),
+    #     password=data.get("password", ""),
+    #     ip=data.get("ip", ""),
+    #     port=data.get("port", 0),
+    # )
+    # return jsonify(msg)
 
 @app.route("/logout", methods=["POST"])
 def logout():
     data = request.get_json(force=True)
-    username = data.get("username", "")
-    msg = auth_service.update_status(username=username, status="offline")
-    return jsonify(msg)
+    return dispatcher.logout(data)
+    # username = data.get("username", "")
+    # msg = auth_service.update_status(username=username, status="offline")
+    # return jsonify(msg)
 
 @app.route("/peers", methods=["GET"])
 def get_peers():
@@ -96,6 +102,29 @@ def update_ip_address(ip: str, username: str):
     return jsonify(msg)
 
 # ------------ REPLICAS ENDPOINTS ------------------
+@app.route('/request_vote', methods=['POST'])
+def request_vote_endpoint():
+    data = request.json
+    response = mng_service.handle_request_vote(data)
+    return jsonify(response)
+
+@app.route('/status', methods=['GET'])
+def status_endpoint():
+    return jsonify({
+        "node_id": mng_service._node_id,
+        "state": mng_service.state.value,
+        "current_term": mng_service.current_term,
+        "commit_index": mng_service._commit_index,
+        "log_length": len(mng_service._log),
+        "peers": mng_service._managers_ips
+    })
+    
+@app.route('/append_entries', methods=['POST'])
+def append_entries_endpoint():
+    data = request.json
+    response = mng_service.handle_append_entries(data)
+    return jsonify(response)
+        
 @app.post("/managers/new/<ip>")
 def add_new_manager(ip: str):
     msg = mng_service.add_new_manager(ip)
@@ -113,7 +142,7 @@ def manager_heartbeat(ip: str):
     """
     msg = mng_service.update_last_seen(ip)
     return jsonify(msg)
-
+        
 # --- Job en background ---
 def check_inactive_users():
     try:
