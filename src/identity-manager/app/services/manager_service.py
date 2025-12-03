@@ -1,10 +1,12 @@
 import requests, os, json, socket, random, time, threading, logging
 from datetime import datetime
+from flask import jsonify, Response
 from enum import Enum
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from helpers import publish_status, get_local_ip, get_overlay_network
 from services.log_service import LogService, LogRepository
 from services.state_service import StateRepository, StateService
+from dispatcher import Dispatcher
 
 
 class NodeState(Enum):
@@ -16,28 +18,32 @@ class ManagerService():
     _instance = None
     _log_service: LogService = None
     _state_service: StateService = None
-    node_id: str = None
-    port: int = None
     _managers_ips: list[str] = None
     _leader_ip: str = None
-    election_timeout: float = None
-    election_timer: threading.Timer = None
-    last_heartbeat: float = None
     _heartbeat_stop: threading.Event = None
     _heartbeat_thread = None
-    next_index: dict = None
-    match_index: dict = None
-    log: list = None
-    voted_for: str = None
-    commit_index: int = None
-    last_applied: int = None
-    _status: NodeState
+    _status: NodeState = None
+    _k: int = None
+    _node_id: str = None
+    _port: int = None
+    _election_timeout: float = None
+    _election_timer: threading.Timer = None
+    _last_heartbeat: float = None
+    _next_index: dict = None
+    _match_index: dict = None
+    _log: list = None
+    _voted_for: str = None
+    _commit_index: int = None
+    _last_applied: int = None
+    _dispatcher: Dispatcher = None
     
-    def __new__(cls):
+    def __new__(cls, dispatcher: Dispatcher):
         if cls._instance is None:
             cls._instance = super(ManagerService, cls).__new__(cls)
-            cls._instance.node_id = get_local_ip()
-            cls._instance.port = 8000
+            cls._instance._k = int(os.getenv("K", "2")) # parametrizable
+            cls._instance._dispatcher = dispatcher
+            cls._instance._node_id = get_local_ip()
+            cls._instance._port = 8000
             cls._instance._discover_managers()
             cls._instance._status = NodeState.FOLLOWER
             cls._instance._log_service = LogService(LogRepository())
@@ -49,12 +55,12 @@ class ManagerService():
             cls._instance._load_persistent_state()
             
             # Leader state
-            cls._instance.next_index = {}
-            cls._instance.match_index = {}
+            cls._instance._next_index = {}
+            cls._instance._match_index = {}
             
             # Election timeout (alineado con heartbeats)
-            cls._instance.election_timeout = random.uniform(3.0, 5.0)
-            cls._instance.last_heartbeat = time.time()
+            cls._instance._election_timeout = random.uniform(3.0, 5.0)
+            cls._instance._last_heartbeat = time.time()
 
             # Heartbeat loop
             cls._instance._heartbeat_stop = threading.Event()
@@ -65,31 +71,31 @@ class ManagerService():
         """Configura el sistema de logging"""
         logging.basicConfig(
             level=logging.INFO,
-            format=f'%(asctime)s - {self.node_id} - %(levelname)s - %(message)s'
+            format=f'%(asctime)s - {self._node_id} - %(levelname)s - %(message)s'
         )
         self.logger = logging.getLogger(__name__)
-        self.logger.info(f"Logging configured for node {self.node_id}")
+        self.logger.info(f"Logging configured for node {self._node_id}")
     
     def _load_persistent_state(self):
         current_state = self._state_service.load()
         if current_state["status"] == 200:
             state_data = current_state["message"]
             self.current_term = state_data.get("current_term", 0)
-            self.voted_for = state_data.get("voted_for", None)
-            self.commit_index = state_data.get("commit_index", -1)
-            self.last_applied = state_data.get("last_applied", -1)
-            self.logger.info(f"Loaded state: term={self.current_term}, voted_for={self.voted_for}, "
-                f"commit_index={self.commit_index}, last_applied={self.last_applied}")
+            self._voted_for = state_data.get("voted_for", None)
+            self._commit_index = state_data.get("commit_index", -1)
+            self._last_applied = state_data.get("last_applied", -1)
+            self.logger.info(f"Loaded state: term={self.current_term}, voted_for={self._voted_for}, "
+                f"commit_index={self._commit_index}, last_applied={self._last_applied}")
 
-        self.log = self._log_service.list_all()
-        self.logger.info(f"Loaded log with {len(self.log)} entries")
+        self._log = self._log_service.list_all()
+        self.logger.info(f"Loaded log with {len(self._log)} entries")
 
     def _save_persistent_state(self):
         payload = {
             "current_term": self.current_term,
-            "voted_for": self.voted_for,
-            "commit_index": self.commit_index,
-            "last_applied": self.last_applied
+            "voted_for": self._voted_for,
+            "commit_index": self._commit_index,
+            "last_applied": self._last_applied
         }
         
         self._state_service.update(payload)
@@ -106,23 +112,23 @@ class ManagerService():
     def update_term_and_vote(self, term: int, voted_for: str = None):
         """Actualiza el término y voto de manera persistente"""
         self.current_term = term
-        self.voted_for = voted_for
+        self._voted_for = voted_for
         self._save_persistent_state()
         self.logger.info(f"Updated term to {term}, voted_for: {voted_for}")
     
     def start(self):
         """Inicia el nodo Raft"""
-        self.logger.info(f"Starting Raft node {self.node_id} on port {self.port}")
+        self.logger.info(f"Starting Raft node {self._node_id} on port {self._port}")
         self.reset_election_timer()
     
     def reset_election_timer(self):
         """Reinicia el temporizador de elección"""
-        if self.election_timer:
-            self.election_timer.cancel()
+        if self._election_timer:
+            self._election_timer.cancel()
         
-        self.election_timeout = random.uniform(3.0, 5.0)
-        self.election_timer = threading.Timer(self.election_timeout, self.start_election)
-        self.election_timer.start()
+        self._election_timeout = random.uniform(3.0, 5.0)
+        self._election_timer = threading.Timer(self._election_timeout, self.start_election)
+        self._election_timer.start()
         self.logger.debug("Election timer reset")
         
     def start_election(self):
@@ -133,7 +139,7 @@ class ManagerService():
         self.logger.info("Election timeout - starting new election")
         self.state = NodeState.CANDIDATE
         self.current_term += 1
-        self.voted_for = self.node_id
+        self._voted_for = self._node_id
         self._save_persistent_state()
         
         # Votar por sí mismo
@@ -145,7 +151,7 @@ class ManagerService():
                 votes_received += 1
         
         # Verificar si ganó la elección
-        if votes_received > len(self._managers_ips) // 2:
+        if votes_received > self._k:
             self.become_leader()
         else:
             self.state = NodeState.FOLLOWER
@@ -158,9 +164,9 @@ class ManagerService():
                 f"{peer_url}/request_vote",
                 json={
                     "term": self.current_term,
-                    "candidate_id": self.node_id,
-                    "last_log_index": len(self.log) - 1,
-                    "last_log_term": self.log[-1]["term"] if self.log else 0
+                    "candidate_id": self._node_id,
+                    "last_log_index": len(self._log) - 1,
+                    "last_log_term": self._log[-1]["term"] if self._log else 0
                 },
                 timeout=3.0
             )
@@ -176,8 +182,8 @@ class ManagerService():
         
         # Inicializar estado del líder
         for peer in self._managers_ips:
-            self.next_index[peer] = len(self.log)
-            self.match_index[peer] = 0
+            self._next_index[peer] = len(self._log)
+            self._match_index[peer] = 0
         
         # Iniciar loop de heartbeats
         self.start_heartbeat_loop(interval=1.0)
@@ -207,21 +213,21 @@ class ManagerService():
     def send_append_entries(self, peer_url: str):
         """Envía AppendEntries RPC a un follower"""
         try:
-            next_index = self.next_index.get(peer_url, 0)
+            next_index = self._next_index.get(peer_url, 0)
             prev_log_index = next_index - 1
-            prev_log_term = self.log[prev_log_index]["term"] if prev_log_index >= 0 else 0
+            prev_log_term = self._log[prev_log_index]["term"] if prev_log_index >= 0 else 0
             
-            entries = self.log[next_index:] if next_index < len(self.log) else []
+            entries = self._log[next_index:] if next_index < len(self._log) else []
             
             response = requests.post(
                 f"{peer_url}/append_entries",
                 json={
                     "term": self.current_term,
-                    "leader_id": self.node_id,
+                    "leader_id": self._node_id,
                     "prev_log_index": prev_log_index,
                     "prev_log_term": prev_log_term,
                     "entries": entries,
-                    "leader_commit": self.commit_index
+                    "leader_commit": self._commit_index
                 },
                 timeout=5.0
             )
@@ -229,12 +235,12 @@ class ManagerService():
             if response.status_code == 200:
                 result = response.json()
                 if result.get("success"):
-                    self.next_index[peer_url] = next_index + len(entries)
-                    self.match_index[peer_url] = self.next_index[peer_url] - 1
-                    self.logger.debug(f"AppendEntries successful for {peer_url}, next_index: {self.next_index[peer_url]}")
+                    self._next_index[peer_url] = next_index + len(entries)
+                    self._match_index[peer_url] = self._next_index[peer_url] - 1
+                    self.logger.debug(f"AppendEntries successful for {peer_url}, next_index: {self._next_index[peer_url]}")
                 else:
-                    self.next_index[peer_url] = max(0, next_index - 1)
-                    self.logger.debug(f"AppendEntries failed for {peer_url}, decrementing next_index to {self.next_index[peer_url]}")
+                    self._next_index[peer_url] = max(0, next_index - 1)
+                    self.logger.debug(f"AppendEntries failed for {peer_url}, decrementing next_index to {self._next_index[peer_url]}")
                     
         except Exception as e:
             self.logger.error(f"Error sending append entries to {peer_url}: {e}")
@@ -256,15 +262,15 @@ class ManagerService():
         if term > self.current_term:
             self.update_term_and_vote(term)
             self.state = NodeState.FOLLOWER
-            self.voted_for = None
+            self._voted_for = None
         
         # Verificar condiciones para votar
         can_vote = (
-            self.voted_for is None or self.voted_for == candidate_id
+            self._voted_for is None or self._voted_for == candidate_id
         ) and self.is_candidate_log_up_to_date(last_log_index, last_log_term)
         
         if can_vote:
-            self.voted_for = candidate_id
+            self._voted_for = candidate_id
             self._save_persistent_state()
             self.reset_election_timer()
             self.logger.info(f"Voted for {candidate_id} in term {term}")
@@ -275,11 +281,11 @@ class ManagerService():
 
     def is_candidate_log_up_to_date(self, last_log_index: int, last_log_term: int) -> bool:
         """Verifica si el log del candidato está actualizado"""
-        if not self.log:
+        if not self._log:
             return True
             
-        our_last_log_term = self.log[-1]["term"]
-        our_last_log_index = len(self.log) - 1
+        our_last_log_term = self._log[-1]["term"]
+        our_last_log_index = len(self._log) - 1
         
         if last_log_term > our_last_log_term:
             return True
@@ -309,23 +315,20 @@ class ManagerService():
         if term > self.current_term:
             self.update_term_and_vote(term)
             self.state = NodeState.FOLLOWER
-            self.voted_for = None
+            self._voted_for = None
         
         # Verificar consistencia del log
         if prev_log_index >= 0:
-            if prev_log_index >= len(self.log) or self.log[prev_log_index]["term"] != prev_log_term:
+            if prev_log_index >= len(self._log) or self._log[prev_log_index]["term"] != prev_log_term:
                 self.logger.debug(f"Log inconsistency at index {prev_log_index}")
                 return {"term": self.current_term, "success": False}
         
         # Añadir entradas al log con persistencia
         if entries:
-            if prev_log_index + 1 < len(self.log):
+            if prev_log_index + 1 < len(self._log):
                 # Eliminar entradas en conflicto y guardar
-                with self.persistence_lock:
-                    self.log = self.log[:prev_log_index + 1]
-                    snapshot = list(self.log)
-                with open(self.log_file, 'w') as f: # CORREGIR ESTA LINEA
-                    json.dump(snapshot, f)
+                self._log_service.delete_log_entries(prev_log_index + 1, len(self._log))
+                self._log = self._log[:prev_log_index + 1]
                 self.logger.info(f"Trimmed log to index {prev_log_index}")
             
             # Añadir nuevas entradas con persistencia
@@ -334,32 +337,32 @@ class ManagerService():
             self.logger.info(f"Added {len(entries)} new log entries from leader {leader_id}")
         
         # Actualizar commit index desde el líder y aplicar
-        if leader_commit > self.commit_index:
-            old_commit = self.commit_index
-            self.commit_index = min(leader_commit, len(self.log) - 1)
-            if old_commit != self.commit_index:
-                self.logger.info(f"Updated commit index from {old_commit} to {self.commit_index}")
+        if leader_commit > self._commit_index:
+            old_commit = self._commit_index
+            self._commit_index = min(leader_commit, len(self._log) - 1)
+            if old_commit != self._commit_index:
+                self.logger.info(f"Updated commit index from {old_commit} to {self._commit_index}")
             self.apply_committed_entries()
             self._save_persistent_state()  # Persistir nuevo commit y last_applied
         
         return {"term": self.current_term, "success": True}
     
-    def handle_client_request(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def handle_client_request(self, data: Dict[str, Any]) -> Optional[Response]:
         """Maneja solicitudes de clientes para añadir datos al log"""
         if not self.I_am_leader():
             # Redirigir al líder si este nodo no es el líder
-            leader_redirect = self._find_network_leader() #revisar aquiiiiiiiiiii
+            leader_redirect = self._find_network_leader() # revisar aquiiiiiii
             if leader_redirect:
                 self.logger.info(f"Redirecting client to leader: {leader_redirect}")
-                return {"error": "not_leader", "leader": leader_redirect}
+                return jsonify({"error": "not_leader", "leader": leader_redirect})
             else:
                 self.logger.warning("No leader available for client request")
-                return {"error": "no_leader_available"}
+                return jsonify({"error": "no_leader_available"})
         
         # Crear nueva entrada de log
         new_entry = {
             "term": self.current_term,
-            "index": len(self.log),
+            "index": len(self._log),
             "data": data,
             "client_id": data.get("client_id", "unknown"),
             "timestamp": time.time()
@@ -377,43 +380,45 @@ class ManagerService():
                 success_count += 1
         
         # Verificar si se alcanzó la mayoría
-        if success_count > len(self.peers) / 2:
+        if success_count > self._k:
             # Commit la entrada en el líder
-            self.commit_index = new_entry["index"]
-            self.apply_committed_entries()
+            self._commit_index = new_entry["index"]
+            response = self.apply_committed_entries()
             self._save_persistent_state()  # comprometer commit/last_applied en disco
 
             # Propagar inmediatamente el nuevo commit a los followers (AppendEntries vacío)
-            for peer in self.peers:
+            for peer in self._managers_ips:
                 threading.Thread(target=self.send_append_entries, args=(peer,), daemon=True).start()
 
             self.logger.info(f"Successfully committed client data at index {new_entry['index']}")
-            return {"success": True, "index": new_entry["index"], "term": self.current_term}
+            # return {"success": True, "index": new_entry["index"], "term": self.current_term}
+            return response
         else:
             # Revertir la entrada si no se pudo replicar
-            with self.persistence_lock:
-                if self.log and self.log[-1]["index"] == new_entry["index"]:
-                    self.log.pop()
-                    snapshot = list(self.log)
-                else:
-                    snapshot = list(self.log)
-            with open(self.log_file, 'w') as f:
-                json.dump(snapshot, f)
+                # if self.log and self.log[-1]["index"] == new_entry["index"]:
+                #     self.log.pop()
+                #     snapshot = list(self.log)
+                # else:
+                #     snapshot = list(self.log)
+            # with open(self.log_file, 'w') as f:
+            #     json.dump(snapshot, f)
+            self._log_service.delete_log_by_index(new_entry['index'])
+            self._log.pop()
             self.logger.error(f"Failed to replicate client data to majority, reverted entry at index {new_entry['index']}")
-            return {"error": "replication_failed"}
+            return jsonify({"message": "Replication_failed", "status": 500})
         
     def replicate_to_follower(self, peer_url: str, entry: Dict[str, Any]) -> bool:
         """Replica una entrada a un follower específico"""
         try:
-            response = self.http.post(
+            response = requests.post(
                 f"{peer_url}/append_entries",
                 json={
                     "term": self.current_term,
-                    "leader_id": self.node_id,
+                    "leader_id": self._node_id,
                     "prev_log_index": entry["index"] - 1,
-                    "prev_log_term": self.log[entry["index"] - 1]["term"] if entry["index"] > 0 else 0,
+                    "prev_log_term": self._log[entry["index"] - 1]["term"] if entry["index"] > 0 else 0,
                     "entries": [entry],
-                    "leader_commit": self.commit_index
+                    "leader_commit": self._commit_index
                 },
                 timeout=3.0
             )
@@ -429,15 +434,18 @@ class ManagerService():
         
     def apply_committed_entries(self):
         """Aplica las entradas comprometidas al estado de la máquina"""
-        while self.last_applied < self.commit_index:
-            self.last_applied += 1
+        response = None
+        while self._last_applied < self._commit_index:
+            self._last_applied += 1
             # Seguridad: evitar índice fuera de rango si commit apunta a más que el log
-            if 0 <= self.last_applied < len(self.log):
-                entry = self.log[self.last_applied]
-                self.apply_entry_to_state_machine(entry)
+            if 0 <= self._last_applied < len(self._log):
+                entry = self._log[self._last_applied]
+                response = self.apply_entry_to_state_machine(entry)
             else:
-                self.logger.error(f"Commit index {self.commit_index} beyond log length {len(self.log)}")
+                self.logger.error(f"Commit index {self._commit_index} beyond log length {len(self._log)}")
                 break
+        
+        return response
     
     def apply_entry_to_state_machine(self, entry: Dict[str, Any]):
         """Aplica una entrada al estado de la máquina (evita duplicados)"""
@@ -445,10 +453,7 @@ class ManagerService():
         
         try:
             applied_data = []
-            if os.path.exists(self.applied_data_file):
-                with open(self.applied_data_file, 'r') as f:
-                    applied_data = json.load(f)
-            
+            applied_data = self._log_service.find_by_applied_criteria(True)
             # Evitar duplicados por (index, term)
             already = any(
                 (e.get("index") == entry.get("index") and e.get("term") == entry.get("term"))
@@ -458,15 +463,15 @@ class ManagerService():
                 self.logger.debug(f"Entry index={entry['index']} term={entry['term']} already applied; skipping.")
                 return
             
-            applied_data.append(entry)
-            with open(self.applied_data_file, 'w') as f:
-                json.dump(applied_data, f, indent=2)
-            self.logger.debug(f"Applied data saved to {self.applied_data_file}")
+            self._log_service.update_applied(entry["index"], True)
+            response = self._dispatcher.call(entry["op"], entry["args"])
+            self.logger.debug(f"Applied data saved")
+            return response
                 
         except Exception as e:
             self.logger.error(f"Error applying entry to state machine: {e}")
+            return None
 
-    
     # region ======== Codigo del Servicio original =========
     
     def _discover_managers(self):

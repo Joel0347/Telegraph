@@ -57,6 +57,11 @@ class LogRepository:
             
             raw.append(log.model_dump(mode="json"))
             self._write_all(raw)
+            
+    def delete_log_by_index(self, index: int):
+        logs = self.list_all()
+        data = [log for log in logs if log.index != index]
+        self._write_all(data)
 
     def update_log(self, log: Log):
         with self._lock:

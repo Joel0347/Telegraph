@@ -27,7 +27,13 @@ class LogService:
 
         except Exception as e:
             return {"message": str(e), "status": 500}
+    
+    def delete_log_by_index(self, index: int):
+        self.repo.delete_log_by_index(index)
         
+    def delete_log_entries(self, from_index: int, to_index: int):
+        for i in range(from_index, to_index):
+            self.delete_log_by_index(i)   
         
     def update_applied(self, index: int, applied: bool):
         try:
@@ -40,6 +46,9 @@ class LogService:
     
     def list_all(self) -> list[Log]:
         return self.repo.list_all()
+    
+    def find_by_applied_criteria(self, applied: bool) -> list[Log]:
+        self.repo.find_by_applied_criteria(applied)
     
     def find_by_index(self, index: int) -> dict:
         try:
