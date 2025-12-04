@@ -13,7 +13,14 @@ class Dispatcher:
             cls._instance._functionalities = {
                 "register": lambda data: cls._instance.register(data),
                 "login": lambda data: cls._instance.login(data), 
-                "logout": lambda data: cls._instance.logout(data) 
+                "logout": lambda data: cls._instance.logout(data),
+                "get_peers": lambda: cls._instance.get_peers(),
+                "list_users": lambda: cls._instance.list_users(),
+                "find_by_username": lambda data: cls._instance.find_by_username(data),
+                "notify_online": lambda data: cls._instance.notify_online(data),
+                "heartbeat": lambda data: cls._instance.heartbeat(data),
+                "is_user_active": lambda data: cls._instance.is_user_active(data),
+                "update_ip_address": lambda data: cls._instance.update_ip_address(data)
             }
             cls._instance.auth_service = auth_service
         return cls._instance
@@ -53,3 +60,47 @@ class Dispatcher:
         )
         return jsonify(msg)
         
+    def get_peers(self) -> Response:
+        peers = self.auth_service.get_peers()
+        return jsonify({"peers": peers, "status": 200})
+
+    def list_users(self) -> Response:
+        usernames = self.auth_service.list_usernames()
+        return jsonify({"usernames": usernames, "status": 200})
+
+    def find_by_username(self, data: dict) -> Response:
+        username = data.get("username", "")
+        msg = self.auth_service.get_user_by_username(username)
+        return jsonify(msg)
+    
+    def notify_online(self, data: dict) -> Response:
+        username = data.get("username", "")
+        msg = self.auth_service.update_status(username, "online")
+        return jsonify(msg)
+
+    def heartbeat(self, data: dict) -> Response:
+        username = data.get("username")
+        
+        if not username:
+            return jsonify({"message": "username requerido", "status": 400})
+
+        try:
+            self.auth_service.update_last_seen(username)
+            return jsonify({"message": "heartbeat recibido", "status": 200})
+        except Exception as e:
+            return jsonify({"message": str(e), "status": 500})
+
+    def is_user_active(self, data: dict) -> Response:
+        username = data.get("username")
+        msg = self.auth_service.get_user_by_username(username)
+    
+        if msg["status"] == 500:
+            return jsonify(msg)
+        
+        return jsonify({"message": msg["message"]["status"], "status": 200})
+
+    def update_ip_address(self, data: dict) -> Response:
+        username = data.get("username")
+        ip = data.get("ip")
+        msg = self.auth_service.update_ip_address(username, ip)
+        return jsonify(msg)
