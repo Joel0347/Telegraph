@@ -18,7 +18,7 @@ class ManagerService():
     _log_service: LogService = None
     _state_service: StateService = None
     _managers_ips: list[str] = None
-    _leader_ip: str = None
+    leader_ip: str = None
     _heartbeat_stop: threading.Event = None
     _heartbeat_thread = None
     _status: NodeState = None
@@ -178,8 +178,9 @@ class ManagerService():
         """Convierte el nodo en líder"""
         self.logger.info(f"Becoming leader for term {self.current_term}")
         self.state = NodeState.LEADER
-        self._leader_ip = get_local_ip()
-        # logica para expandir la noticia de mi liderazgo
+        self.leader_ip = get_local_ip()
+        self._request_all("POST", f"/new_leader/{self.leader_ip}")
+        # logica para expandir la noticia de mi liderazgo a los clientes
         
         # Inicializar estado del líder
         for peer in self._managers_ips:
@@ -513,16 +514,16 @@ class ManagerService():
         self._managers_ips = list(managers)
     
     def _find_network_leader(self) -> str:
-        if self._leader_ip:
-            return self._leader_ip
+        if self.leader_ip:
+            return self.leader_ip
         
         try:
             res = self._request_all("GET", f"/managers/leader")
             if res.json()["status"] == 200:
-                self._leader_ip = res.json()["message"]
-                return self._leader_ip
+                self.leader_ip = res.json()["message"]
+                return self.leader_ip
             else:
-                self._leader_ip = None
+                self.leader_ip = None
             publish_status(res.json())
         except Exception as e:
             publish_status({'message': f"Error inesperado {str(e)}", 'status': 500})
@@ -568,7 +569,7 @@ class ManagerService():
             return {"message": f"ERROR: {str(e)}", "status": 500}
     
     def get_leader(self) -> str:
-        if leader := self._leader_ip:
+        if leader := self.leader_ip:
             return {"message": leader, "status": 200}
         else:
             return {"message": f"No leader known yet", "status": 404}
