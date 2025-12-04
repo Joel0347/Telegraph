@@ -1,8 +1,7 @@
 import requests, os, json, socket, random, time, threading, logging
 from datetime import datetime
-from flask import jsonify, Response
 from enum import Enum
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from helpers import publish_status, get_local_ip, get_overlay_network
 from services.log_service import LogService, LogRepository
 from services.state_service import StateRepository, StateService
@@ -179,6 +178,8 @@ class ManagerService():
         """Convierte el nodo en líder"""
         self.logger.info(f"Becoming leader for term {self.current_term}")
         self.state = NodeState.LEADER
+        self._leader_ip = get_local_ip()
+        # logica para expandir la noticia de mi liderazgo
         
         # Inicializar estado del líder
         for peer in self._managers_ips:
@@ -237,10 +238,16 @@ class ManagerService():
                 if result.get("success"):
                     self._next_index[peer_url] = next_index + len(entries)
                     self._match_index[peer_url] = self._next_index[peer_url] - 1
-                    self.logger.debug(f"AppendEntries successful for {peer_url}, next_index: {self._next_index[peer_url]}")
+                    self.logger.debug(
+                        f"AppendEntries successful for {peer_url},"
+                        f"next_index: {self._next_index[peer_url]}"
+                    )
                 else:
                     self._next_index[peer_url] = max(0, next_index - 1)
-                    self.logger.debug(f"AppendEntries failed for {peer_url}, decrementing next_index to {self._next_index[peer_url]}")
+                    self.logger.debug(
+                        f"AppendEntries failed for {peer_url}, decrementing next_index to " +
+                        f"{self._next_index[peer_url]}"
+                    )
                     
         except Exception as e:
             self.logger.error(f"Error sending append entries to {peer_url}: {e}")
@@ -255,7 +262,10 @@ class ManagerService():
         
         # Verificar term
         if term < self.current_term:
-            self.logger.debug(f"Rejecting vote request from {candidate_id}: term {term} < current term {self.current_term}")
+            self.logger.debug(
+                f"Rejecting vote request from {candidate_id}: term {term}" +
+                f" < current term {self.current_term}"
+            )
             return {"term": self.current_term, "vote_granted": False}
         
         # Actualizar term si es necesario
@@ -305,7 +315,10 @@ class ManagerService():
         
         # Verificar term
         if term < self.current_term:
-            self.logger.debug(f"Rejecting AppendEntries from {leader_id}: term {term} < current term {self.current_term}")
+            self.logger.debug(
+                f"Rejecting AppendEntries from {leader_id}: term {term}" +
+                f" < current term {self.current_term}"
+            )
             return {"term": self.current_term, "success": False}
         
         # Reiniciar election timer
@@ -347,65 +360,64 @@ class ManagerService():
         
         return {"term": self.current_term, "success": True}
     
-    def handle_client_request(self, data: Dict[str, Any]) -> Optional[Response]:
+    def handle_client_request(self, op: str, args: dict) -> dict:
         """Maneja solicitudes de clientes para añadir datos al log"""
         if not self.I_am_leader():
             # Redirigir al líder si este nodo no es el líder
-            leader_redirect = self._find_network_leader() # revisar aquiiiiiii
-            if leader_redirect:
-                self.logger.info(f"Redirecting client to leader: {leader_redirect}")
-                return jsonify({"error": "not_leader", "leader": leader_redirect})
+            leader = self._find_network_leader()
+            if leader:
+                self.logger.info(f"Redirecting client to leader: {leader}")
+                return {"success": False, "leader": leader}
             else:
                 self.logger.warning("No leader available for client request")
-                return jsonify({"error": "no_leader_available"})
+                return {"succes": False, "message": "no_leader_available"}
         
-        # Crear nueva entrada de log
-        new_entry = {
-            "term": self.current_term,
-            "index": len(self._log),
-            "data": data,
-            "client_id": data.get("client_id", "unknown"),
-            "timestamp": time.time()
-        }
-        
-        # Añadir al log local
-        self._save_log_entry(new_entry)
-        self.logger.info(f"Added client data to log at index {new_entry['index']}")
-        
-        # Replicar a los followers
-        success_count = 1  # Contamos al líder mismo
-        
-        for peer in self._managers_ips:
-            if self.replicate_to_follower(peer, new_entry):
-                success_count += 1
-        
-        # Verificar si se alcanzó la mayoría
-        if success_count > self._k:
-            # Commit la entrada en el líder
-            self._commit_index = new_entry["index"]
-            response = self.apply_committed_entries()
-            self._save_persistent_state()  # comprometer commit/last_applied en disco
-
-            # Propagar inmediatamente el nuevo commit a los followers (AppendEntries vacío)
+        try:
+            # Crear nueva entrada de log
+            new_entry = {
+                "term": self.current_term,
+                "index": len(self._log),
+                "op": op,
+                "args": args,
+                "applied": False
+            }
+            
+            # Añadir al log local
+            self._save_log_entry(new_entry)
+            self.logger.info(f"Added client data to log at index {new_entry['index']}")
+            
+            # Replicar a los followers
+            success_count = 1  # Contamos al líder mismo
+            
             for peer in self._managers_ips:
-                threading.Thread(target=self.send_append_entries, args=(peer,), daemon=True).start()
+                if self.replicate_to_follower(peer, new_entry):
+                    success_count += 1
+            
+            # Verificar si se alcanzó la mayoría
+            if success_count > self._k:
+                # Commit la entrada en el líder
+                self._commit_index = new_entry["index"]
+                self.apply_committed_entries()
+                self._save_persistent_state()  # comprometer commit/last_applied en disco
 
-            self.logger.info(f"Successfully committed client data at index {new_entry['index']}")
-            # return {"success": True, "index": new_entry["index"], "term": self.current_term}
-            return response
-        else:
-            # Revertir la entrada si no se pudo replicar
-                # if self.log and self.log[-1]["index"] == new_entry["index"]:
-                #     self.log.pop()
-                #     snapshot = list(self.log)
-                # else:
-                #     snapshot = list(self.log)
-            # with open(self.log_file, 'w') as f:
-            #     json.dump(snapshot, f)
-            self._log_service.delete_log_by_index(new_entry['index'])
-            self._log.pop()
-            self.logger.error(f"Failed to replicate client data to majority, reverted entry at index {new_entry['index']}")
-            return jsonify({"message": "Replication_failed", "status": 500})
+                # Propagar inmediatamente el nuevo commit a los followers (AppendEntries vacío)
+                for peer in self._managers_ips:
+                    threading.Thread(target=self.send_append_entries, args=(peer,), daemon=True).start()
+
+                self.logger.info(f"Successfully committed client data at index {new_entry['index']}")
+                return {"success": True, "message": ""}
+            else:
+                self._log_service.delete_log_by_index(new_entry['index'])
+                self._log.pop()
+                self.logger.error(
+                    "Failed to replicate client data to majority, " + 
+                    f"reverted entry at index {new_entry['index']}"
+                )
+                return {"success": False, "message": "Failed when replicating"}
+            
+        except Exception as e:
+            return {"success": False, "message": f"{e}"}
+        
         
     def replicate_to_follower(self, peer_url: str, entry: Dict[str, Any]) -> bool:
         """Replica una entrada a un follower específico"""
@@ -434,22 +446,19 @@ class ManagerService():
         
     def apply_committed_entries(self):
         """Aplica las entradas comprometidas al estado de la máquina"""
-        response = None
         while self._last_applied < self._commit_index:
             self._last_applied += 1
             # Seguridad: evitar índice fuera de rango si commit apunta a más que el log
             if 0 <= self._last_applied < len(self._log):
                 entry = self._log[self._last_applied]
-                response = self.apply_entry_to_state_machine(entry)
+                self.apply_entry_to_state_machine(entry)
             else:
                 self.logger.error(f"Commit index {self._commit_index} beyond log length {len(self._log)}")
                 break
-        
-        return response
     
     def apply_entry_to_state_machine(self, entry: Dict[str, Any]):
         """Aplica una entrada al estado de la máquina (evita duplicados)"""
-        self.logger.info(f"Applying entry {entry['index']} to state machine: {entry['data']}")
+        self.logger.info(f"Applying entry {entry['index']} to state machine")
         
         try:
             applied_data = []
@@ -464,13 +473,14 @@ class ManagerService():
                 return
             
             self._log_service.update_applied(entry["index"], True)
-            response = self._dispatcher.call(entry["op"], entry["args"])
+            
+            if not self.I_am_leader():
+                self._dispatcher.call(entry["op"], entry["args"])
+                
             self.logger.debug(f"Applied data saved")
-            return response
                 
         except Exception as e:
             self.logger.error(f"Error applying entry to state machine: {e}")
-            return None
 
     # region ======== Codigo del Servicio original =========
     
@@ -502,14 +512,22 @@ class ManagerService():
 
         self._managers_ips = list(managers)
     
-    def _find_network_leader(self) -> dict:
+    def _find_network_leader(self) -> str:
+        if self._leader_ip:
+            return self._leader_ip
+        
         try:
             res = self._request_all("GET", f"/managers/leader")
             if res.json()["status"] == 200:
                 self._leader_ip = res.json()["message"]
+                return self._leader_ip
+            else:
+                self._leader_ip = None
             publish_status(res.json())
         except Exception as e:
             publish_status({'message': f"Error inesperado {str(e)}", 'status': 500})
+        
+        return None
     
     def I_am_leader(self) -> bool:
         return self._status == NodeState.LEADER
@@ -567,13 +585,3 @@ class ManagerService():
         ip = get_local_ip()
         res = self._request_all("POST", f"/manager/heartbeat/{ip}")
         publish_status(res.json())
-
-    def update_last_seen(self, ip: str) -> dict:
-        if ip not in self._managers_last_seen:
-            return {"message": f"{ip} not found", "status": 404}
-        
-        try:
-            self._managers_last_seen[ip] = datetime.now()
-            return {"message": "heartbeat rreceived", "status": 200}
-        except Exception as e:
-            return {"message": f"Error: {str(e)}", "status": 500}
