@@ -28,7 +28,7 @@ class Dispatcher:
 
 
     # --- Functionalities ---
-    def register(self, data: dict):
+    def register(self, data: dict) -> Response:
         msg = self.auth_service.register_user(
             username=data.get("username", ""),
             password=data.get("password", ""),
@@ -37,7 +37,7 @@ class Dispatcher:
         )
         return jsonify(msg)
     
-    def login(self, data: dict):
+    def login(self, data: dict) -> Response:
         msg = self.auth_service.login_user(
             username=data.get("username", ""),
             password=data.get("password", ""),
@@ -46,7 +46,7 @@ class Dispatcher:
         )
         return jsonify(msg)
     
-    def logout(self, data: dict):
+    def logout(self, data: dict) -> Response:
         username = data.get("username", "")
         msg = self.auth_service.update_status(
             username=username, status="offline"

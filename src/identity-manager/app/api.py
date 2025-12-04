@@ -10,12 +10,65 @@ import requests, threading
 from udp_discovery import run_server
 from dispatcher import Dispatcher
 
-# devolver por defecto si no es lider: {"message": "forbidden, not leader", "status": 403}
+
 app = Flask(__name__)
 user_repo = UserRepository()
 auth_service = AuthService(user_repo)
 dispatcher = Dispatcher(auth_service)
 mng_service = ManagerService(dispatcher)
+
+
+# --- Interceptor ---
+@app.before_request
+def intercept_requests():
+    # Endpoints de clientes (los que definiste en la sección CLIENT ENDPOINTS)
+    client_endpoints = {
+        "register",
+        "login",
+        "logout",
+        "get_peers",
+        "list_users",
+        "find_by_username",
+        "notify_online",
+        "heartbeat",
+        "is_user_active",
+        "update_ip_address",
+    }
+
+    endpoint = request.endpoint  # nombre de la función de vista
+
+    if endpoint in client_endpoints:
+        # Extraer argumentos de la ruta y del body
+        args = {}
+        if request.view_args:  # parámetros de la URL
+            args.update(request.view_args)
+        if request.is_json:    # parámetros del body
+            args.update(request.get_json(silent=True) or {})
+
+        # Llamar a handle_client (asumimos que existe)
+        response = mng_service.handle_client_request(endpoint, args)
+        
+        if not response["success"] and (leader := response.get("leader")):
+            try:
+                forward_url = f"http://{leader}:8000/" + request.path.lstrip("/")
+                forwarded = requests.request(
+                    method=request.method,
+                    url=forward_url,
+                    json=args,
+                    timeout=2
+                )
+                return jsonify(forwarded.json())
+            except Exception as e:
+                return jsonify({
+                    "message": f"No se pudo reenviar al líder {leader}: {str(e)}",
+                    "status": 500
+                })
+        elif not response["success"]:
+            # Bloquear ejecución del endpoint
+            return jsonify({"message": f"Error: {response["message"]}", "status": 500})
+
+    # Si handle_client devolvió True → se ejecuta el endpoint normalmente
+    return None
 
 # -------------- CLIENT ENDPOINTS ------------------
 @app.route("/register", methods=["POST"])
@@ -103,13 +156,13 @@ def update_ip_address(ip: str, username: str):
 
 # ------------ REPLICAS ENDPOINTS ------------------
 @app.route('/request_vote', methods=['POST'])
-def request_vote_endpoint():
+def request_vote():
     data = request.json
     response = mng_service.handle_request_vote(data)
     return jsonify(response)
 
 @app.route('/status', methods=['GET'])
-def status_endpoint():
+def status():
     return jsonify({
         "node_id": mng_service._node_id,
         "state": mng_service.state.value,
@@ -120,7 +173,7 @@ def status_endpoint():
     })
     
 @app.route('/append_entries', methods=['POST'])
-def append_entries_endpoint():
+def append_entries():
     data = request.json
     response = mng_service.handle_append_entries(data)
     return jsonify(response)
@@ -135,13 +188,6 @@ def find_leader():
     msg = mng_service.get_leader()
     return jsonify(msg)
 
-@app.post("/manager/heartbeat/<ip>")
-def manager_heartbeat(ip: str):
-    """
-    Endpoint que los clientes llaman periódicamente para indicar que siguen activos.
-    """
-    msg = mng_service.update_last_seen(ip)
-    return jsonify(msg)
         
 # --- Job en background ---
 def check_inactive_users():
