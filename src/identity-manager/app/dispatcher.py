@@ -20,7 +20,8 @@ class Dispatcher:
                 "notify_online": cls._instance.notify_online,
                 "heartbeat": cls._instance.heartbeat,
                 "is_user_active": cls._instance.is_user_active,
-                "update_ip_address": cls._instance.update_ip_address
+                "update_ip_address": cls._instance.update_ip_address,
+                "update_status": cls._instance.update_status
             }
             cls._instance.auth_service = auth_service
         return cls._instance
@@ -103,4 +104,9 @@ class Dispatcher:
         username = data.get("username")
         ip = data.get("ip")
         msg = self.auth_service.update_ip_address(username, ip)
+        return jsonify(msg)
+    
+    def update_status(self, data: dict) -> Response:
+        username = data.get("username")
+        msg = self.auth_service.update_status(username, "offline")
         return jsonify(msg)

@@ -208,6 +208,9 @@ def new_leader(ip: str):
         
 # --- Job en background ---
 def check_inactive_users():
+    if not mng_service.I_am_leader():
+        return
+    
     try:
         now = datetime.now()
         timeout = timedelta(seconds=30)  # tolerancia 30 seg
@@ -215,6 +218,8 @@ def check_inactive_users():
         for u in users:
             if u.last_seen and (now - u.last_seen) > timeout and u.status != "offline":
                 auth_service.update_status(u.username, "offline")
+                args = {"username": u.username}
+                mng_service.handle_client_request("update_status", args)
                 requests.post(f"http://{u.ip}:{u.port}/disconnect")
                 app.logger.info(f"Usuario {u.username} marcado como offline por inactividad")
     except (Exception, ConnectionError, RequestException):
