@@ -48,7 +48,7 @@ class LogService:
         return self.repo.list_all()
     
     def find_by_applied_criteria(self, applied: bool) -> list[Log]:
-        self.repo.find_by_applied_criteria(applied)
+        return self.repo.find_by_applied_criteria(applied)
     
     def find_by_index(self, index: int) -> dict:
         try:

@@ -19,6 +19,7 @@ class ManagerService():
     _state_service: StateService = None
     _managers_ips: list[str] = None
     leader_ip: str = None
+    current_term: int = None
     _heartbeat_stop: threading.Event = None
     _heartbeat_thread = None
     _status: NodeState = None
@@ -64,6 +65,8 @@ class ManagerService():
             # Heartbeat loop
             cls._instance._heartbeat_stop = threading.Event()
             # ===================================
+            
+            cls._instance.start()
         return cls._instance
     
     def _setup_logging(self):
@@ -78,7 +81,7 @@ class ManagerService():
     def _load_persistent_state(self):
         current_state = self._state_service.load()
         if current_state["status"] == 200:
-            state_data = current_state["message"]
+            state_data: dict = current_state["message"]
             self.current_term = state_data.get("current_term", 0)
             self._voted_for = state_data.get("voted_for", None)
             self._commit_index = state_data.get("commit_index", -1)
@@ -105,6 +108,7 @@ class ManagerService():
         
         if res["status"] == 200:
             self.logger.debug(f"Log entry saved: index={entry.get('index')}")
+            self._log.append(entry)
         else:
             self.logger.error(f"Error saving log entry: {res['message']}")
         
@@ -136,7 +140,7 @@ class ManagerService():
             return
             
         self.logger.info("Election timeout - starting new election")
-        self.state = NodeState.CANDIDATE
+        self._status = NodeState.CANDIDATE
         self.current_term += 1
         self._voted_for = self._node_id
         self._save_persistent_state()
@@ -153,7 +157,7 @@ class ManagerService():
         if votes_received > self._k:
             self.become_leader()
         else:
-            self.state = NodeState.FOLLOWER
+            self._status = NodeState.FOLLOWER
             self.reset_election_timer()
     
     def request_vote(self, peer_url: str) -> bool:
@@ -177,9 +181,10 @@ class ManagerService():
     def become_leader(self):
         """Convierte el nodo en líder"""
         self.logger.info(f"Becoming leader for term {self.current_term}")
-        self.state = NodeState.LEADER
+        self._status = NodeState.LEADER
         self.leader_ip = get_local_ip()
-        self._request_all("POST", f"/new_leader/{self.leader_ip}")
+        self._send_request_to_all_managers("POST", f"/new_leader/{self.leader_ip}")
+        self._send_request_to_all_clients("POST", f"/new_leader/{self.leader_ip}")
         # logica para expandir la noticia de mi liderazgo a los clientes
         
         # Inicializar estado del líder
@@ -272,7 +277,7 @@ class ManagerService():
         # Actualizar term si es necesario
         if term > self.current_term:
             self.update_term_and_vote(term)
-            self.state = NodeState.FOLLOWER
+            self._status = NodeState.FOLLOWER
             self._voted_for = None
         
         # Verificar condiciones para votar
@@ -328,7 +333,7 @@ class ManagerService():
         # Convertirse en follower si es necesario
         if term > self.current_term:
             self.update_term_and_vote(term)
-            self.state = NodeState.FOLLOWER
+            self._status = NodeState.FOLLOWER
             self._voted_for = None
         
         # Verificar consistencia del log
@@ -466,7 +471,7 @@ class ManagerService():
             applied_data = self._log_service.find_by_applied_criteria(True)
             # Evitar duplicados por (index, term)
             already = any(
-                (e.get("index") == entry.get("index") and e.get("term") == entry.get("term"))
+                (e.index == entry.get("index") and e.term == entry.get("term"))
                 for e in applied_data
             )
             if already:
@@ -512,13 +517,14 @@ class ManagerService():
                     continue
 
         self._managers_ips = list(managers)
+        self._managers_ips.remove(get_local_ip())
     
     def _find_network_leader(self) -> str:
         if self.leader_ip:
             return self.leader_ip
         
         try:
-            res = self._request_all("GET", f"/managers/leader")
+            res = self._send_request_to_all_managers("GET", f"/managers/leader")
             if res.json()["status"] == 200:
                 self.leader_ip = res.json()["message"]
                 return self.leader_ip
@@ -533,7 +539,7 @@ class ManagerService():
     def I_am_leader(self) -> bool:
         return self._status == NodeState.LEADER
     
-    def _request_all(self, method: str, path: str, **kwargs) -> requests.Response:
+    def _send_request_to_all_managers(self, method: str, path: str, **kwargs) -> requests.Response:
         """
         Helper que intenta la petición en todas las URLs de managers.
         Retorna la primera respuesta exitosa, o None si todas fallan.
@@ -560,6 +566,19 @@ class ManagerService():
                 publish_status({'message': f"Error con {manager}: {str(e)}", 'status': 500})
                 continue
         return res
+    
+    def _send_request_to_all_clients(self, method: str, path: str, **kwargs):
+        users = self._dispatcher.auth_service.list_all()
+        for user in users:
+            try:
+                res = requests.request(
+                    method, f"http://{user.ip}:{user.port}{path}",
+                    timeout=2, **kwargs
+                )
+                res.raise_for_status()
+            except Exception as e:
+                publish_status({'message': f"Error con {user}: {str(e)}", 'status': 500})
+                continue
         
     def add_new_manager(self, ip: str):
         try:
@@ -577,12 +596,14 @@ class ManagerService():
     def _notify_existence(self) -> dict:
         try:
             ip = get_local_ip()
-            res = self._request_all("POST", f"/managers/new/{ip}")
+            res = self._send_request_to_all_managers("POST", f"/managers/new/{ip}")
             publish_status(res.json())
         except Exception as e:
             publish_status({'message': f"Error inesperado {str(e)}", 'status': 500})
         
-    def send_heart_beat(self):
-        ip = get_local_ip()
-        res = self._request_all("POST", f"/manager/heartbeat/{ip}")
-        publish_status(res.json())
+    def update_leader(self, new_leader_addr: str):
+        try:
+            self.leader_ip = new_leader_addr
+            return {"message": "Leader updated succesfully", "status": 200}
+        except Exception as e:
+            return {"message": f"Error updating leader: {e}", "status": 500}

@@ -11,16 +11,16 @@ class Dispatcher:
         if cls._instance is None:
             cls._instance = super(Dispatcher, cls).__new__(cls)
             cls._instance._functionalities = {
-                "register": lambda data: cls._instance.register(data),
-                "login": lambda data: cls._instance.login(data), 
-                "logout": lambda data: cls._instance.logout(data),
-                "get_peers": lambda: cls._instance.get_peers(),
-                "list_users": lambda: cls._instance.list_users(),
-                "find_by_username": lambda data: cls._instance.find_by_username(data),
-                "notify_online": lambda data: cls._instance.notify_online(data),
-                "heartbeat": lambda data: cls._instance.heartbeat(data),
-                "is_user_active": lambda data: cls._instance.is_user_active(data),
-                "update_ip_address": lambda data: cls._instance.update_ip_address(data)
+                "register": cls._instance.register,
+                "login": cls._instance.login, 
+                "logout": cls._instance.logout,
+                "get_peers": cls._instance.get_peers,
+                "list_users": cls._instance.list_users,
+                "find_by_username": cls._instance.find_by_username,
+                "notify_online": cls._instance.notify_online,
+                "heartbeat": cls._instance.heartbeat,
+                "is_user_active": cls._instance.is_user_active,
+                "update_ip_address": cls._instance.update_ip_address
             }
             cls._instance.auth_service = auth_service
         return cls._instance

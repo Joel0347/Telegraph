@@ -6,11 +6,13 @@ from helpers import publish_status, get_local_ip, get_local_port, get_overlay_ne
 class ApiHandlerService():
     _instance = None
     api_urls: list[str] = None
+    manager_leader_addr: str = None
     
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(ApiHandlerService, cls).__new__(cls)
             cls._instance._discover_managers()
+            cls._instance._find_leader_addr()
         return cls._instance
     
     def _discover_managers(self):
@@ -41,7 +43,38 @@ class ApiHandlerService():
 
         self.api_urls = list(api_urls)
     
-    def _request_all(self, method: str, path: str, **kwargs) -> requests.Response:
+    def _find_leader_addr(self):
+        try:
+            res = self._send_request_to_all("GET", "/managers/leader")
+            if res.json()["status"] == 200:
+                self.manager_leader_addr = res.json()["message"]
+            else:
+                publish_status(res.json())
+        except Exception as e:
+            publish_status({'message': f"Error inesperado {e}", 'status': 500})
+    
+    def _send_request(self, method: str, path: str, **kwargs) -> requests.Response:
+        res = requests.Response()
+        res.status_code = 503
+        res._content = b'{"message":"No leader disponible", "status": 500}'
+        res.headers['Content-Type'] = 'application/json'
+        api_port = int(os.getenv("API_PORT", "8000"))
+        
+        try:
+            if not self.manager_leader_addr:
+                self._find_leader_addr()
+                
+            res = requests.request(
+                method, f"http://{self.manager_leader_addr}:{api_port}{path}",
+                timeout=2, **kwargs
+            )
+        except Exception as e:
+            ## comentar esta linea para no mostrar los managers caidos
+            publish_status({'message': f"Error con {self.manager_leader_addr}: {e}", 'status': 500})
+        
+        return res
+    
+    def _send_request_to_all(self, method: str, path: str, **kwargs) -> requests.Response:
         """
         Helper que intenta la petición en todas las URLs de managers.
         Retorna la primera respuesta exitosa, o None si todas fallan.
@@ -69,10 +102,12 @@ class ApiHandlerService():
                 continue
         return res
 
-    
+    def update_leader_addr(self, new_leader_addr: str):
+        self.manager_leader_addr = new_leader_addr
+        
     def get_peer_address(self, username: str) -> Optional[tuple]:
         try:
-            res = self._request_all("GET", "/peers")
+            res = self._send_request("GET", "/peers")
             peers = res.json().get("peers", [])
             peer = next((p for p in peers if p["username"] == username), None)
             if peer:
@@ -83,7 +118,7 @@ class ApiHandlerService():
     
     def get_users(self, username: str) -> list[dict]:
         try:
-            res = self._request_all("GET", "/users")
+            res = self._send_request("GET", "/users")
             if res.json()["status"] == 200:
                 return [u["username"] for u in res.json()['usernames'] if u["username"] != username]
             else:
@@ -108,7 +143,7 @@ class ApiHandlerService():
             
     def get_user_by_username(self, username: str) -> dict:
         try:
-            res = self._request_all("GET", f"/users/{username}")
+            res = self._send_request("GET", f"/users/{username}")
             if res.json()["status"] == 200:
                 return res.json()["message"]
             else:
@@ -120,14 +155,14 @@ class ApiHandlerService():
         
     def notify_online(self, username: str):
         try:
-            res = self._request_all("GET", f"/users/{username}")
+            res = self._send_request("GET", f"/users/{username}")
             publish_status(res.json())
         except Exception as e:
             publish_status({'message': f"Error inesperado {e}", 'status': 500})
     
     def check_is_active(self, username: str) -> bool:
         try:
-            res = self._request_all("GET", f"/users/active/{username}")
+            res = self._send_request("GET", f"/users/active/{username}")
             publish_status(res.json())
             
             if res.json()["status"] == 200:
@@ -138,16 +173,16 @@ class ApiHandlerService():
             return False
         
     def send_heart_beat(self, username: str):
-        res = self._request_all("POST", "/heartbeat", json={"username": username})
+        res = self._send_request("POST", "/heartbeat", json={"username": username})
         publish_status(res.json())
             
     def logout(self, username: str):
-        res = self._request_all("POST", "/logout", json={"username": username})
+        res = self._send_request("POST", "/logout", json={"username": username})
         publish_status(res.json())
             
     def login_register(self, username: str, pwd: str, action: Literal["login", "register"]) -> bool:
         try:
-            res = self._request_all("POST", f"/{action}", json={
+            res = self._send_request("POST", f"/{action}", json={
                 "username": username,
                 "password": pwd,
                 "ip": get_local_ip(),
@@ -167,7 +202,7 @@ class ApiHandlerService():
             saved_addr = self.get_peer_address(username)
 
             if current_addr != saved_addr:
-                res = self._request_all("PUT", f"/users/reconnect/{current_addr}/{username}")
+                res = self._send_request("PUT", f"/users/reconnect/{current_addr}/{username}")
                 publish_status(res.json())
         except Exception as e:
             publish_status({'message': f"Error inesperado: {e}", 'status': 500})

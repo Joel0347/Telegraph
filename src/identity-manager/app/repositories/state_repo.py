@@ -19,7 +19,7 @@ class StateRepository:
             if not os.path.exists(cls._instance.dbpath):
                 os.makedirs(os.path.dirname(cls._instance.dbpath), exist_ok=True)
                 with open(cls._instance.dbpath, 'w', encoding='utf-8') as f:
-                    json.dump(State(), f, indent=2, ensure_ascii=False)
+                    json.dump(State().model_dump(), f, indent=2, ensure_ascii=False)
         return cls._instance
 
 

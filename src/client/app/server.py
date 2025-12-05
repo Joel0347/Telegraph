@@ -52,6 +52,14 @@ def disconnect_user():
     except:
         return jsonify({"status": "error"}), 200
 
+@app.post("/new_leader/<leader_addr>")
+def new_leader(leader_addr: str):
+    try:
+        api_srv.update_leader_addr(leader_addr)
+        return jsonify({"status": "ok"}), 200
+    except:
+        return jsonify({"status": "error"}), 500
+
 def start_flask_server():
     port = int(os.getenv("API_PORT", "8000"))
     app.run(host="0.0.0.0", port=port)
