@@ -135,6 +135,7 @@ docker run --rm \
   -v $(pwd)/volumes/identity-data:/data \
   -p <port_on_host>:8000 \
   -e UDP_PORT=5353 \
+  -e K=2 \
   src-identity-manager:latest
 ```
 
@@ -171,3 +172,10 @@ docker swarm join-token manager
 ```
 
 3. Copy the command given and paste it in the other computer
+
+
+### Debug manager status
+
+```bash
+curl "http://localhost:<port_on_host>/status"
+```

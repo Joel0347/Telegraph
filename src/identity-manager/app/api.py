@@ -64,7 +64,7 @@ def intercept_requests():
                 })
         elif not response["success"]:
             # Bloquear ejecución del endpoint
-            return jsonify({"message": f"Error: {response["message"]}", "status": 500})
+            return jsonify({"message": f"Error: {response['message']}", "status": 500})
 
     # Si handle_client devolvió True → se ejecuta el endpoint normalmente
     return None
@@ -104,13 +104,13 @@ def logout():
 
 @app.route("/peers", methods=["GET"])
 def get_peers():
-    return dispatcher.get_peers({})
+    return dispatcher.get_peers()
     # peers = auth_service.get_peers()
     # return jsonify({"peers": peers, "status": 200})
 
 @app.route("/users", methods=["GET"])
 def list_users():
-    return dispatcher.list_users({})
+    return dispatcher.list_users()
     # usernames = auth_service.list_usernames()
     # return jsonify({"usernames": usernames, "status": 200})
 
@@ -178,7 +178,7 @@ def request_vote():
 def status():
     return jsonify({
         "node_id": mng_service._node_id,
-        "state": mng_service.state.value,
+        "state": mng_service._status.value,
         "current_term": mng_service.current_term,
         "commit_index": mng_service._commit_index,
         "log_length": len(mng_service._log),
@@ -196,15 +196,15 @@ def add_new_manager(ip: str):
     msg = mng_service.add_new_manager(ip)
     return jsonify(msg)
 
-@app.post("/managers/leader")
+@app.get("/managers/leader")
 def find_leader():
     msg = mng_service.get_leader()
     return jsonify(msg)
 
 @app.post("/new_leader/<ip>")
-def find_leader(ip: str):
-    mng_service.leader_ip = ip
-    return jsonify({"message": "There is a new leader", "status": 200})
+def new_leader(ip: str):
+    msg = mng_service.update_leader(ip)
+    return jsonify(msg)
         
 # --- Job en background ---
 def check_inactive_users():
