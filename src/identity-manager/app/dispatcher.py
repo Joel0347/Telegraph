@@ -62,12 +62,12 @@ class Dispatcher:
         return jsonify(msg)
         
     def get_peers(self) -> Response:
-        peers = self.auth_service.get_peers()
-        return jsonify({"peers": peers, "status": 200})
+        msg = self.auth_service.get_peers()
+        return jsonify(msg)
 
     def list_users(self) -> Response:
-        usernames = self.auth_service.list_usernames()
-        return jsonify({"usernames": usernames, "status": 200})
+        msg = self.auth_service.list_usernames()
+        return jsonify(msg)
 
     def find_by_username(self, data: dict) -> Response:
         username = data.get("username", "")

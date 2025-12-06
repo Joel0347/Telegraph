@@ -1,9 +1,12 @@
-from bcrypt import hashpw, checkpw, gensalt
-from typing import Tuple, Literal
+from typing import Literal
 from repositories.user_repo import UserRepository
 from models.user import User
 from datetime import datetime
 
+
+class ApiResponse(dict):
+    def __init__(self, message: str, status: int):
+        super().__init__(message=message, status=status)
 
 class AuthService:
     _instance = None
@@ -16,17 +19,19 @@ class AuthService:
         return cls._instance
 
 
-    def register_user(self, username: str, password: str, ip: str = "", port: int = 0) -> dict:
+    def register_user(
+            self, username: str, password: str,
+            ip: str, port: int
+    ) -> ApiResponse:
         try:
             if not username or not password:
-                return {"message": "Faltan datos", "status": 400}
+                return ApiResponse("Faltan datos", 400)
             
             existing = self.repo.find_by_username(username)
             if existing:
-                return {
-                    "message": f"Usuario {username} ya se encuentra registrado",
-                    "status": 409
-                }
+                return ApiResponse(
+                    f"Usuario {username} ya se encuentra registrado", 409
+                )
 
             user = User(
                 username=username, ip=ip, port=port, status="online",
@@ -35,90 +40,88 @@ class AuthService:
             )
 
             self.repo.add_user(user)
-            return {
-                "message": f"Usuario {username} registrado correctamente",
-                "status": 200
-            }
+            return ApiResponse(f"Usuario {username} registrado correctamente", 200)
 
         except Exception as e:
-            return {"message": str(e), "status": 500}
+            return ApiResponse(str(e), 500)
         
 
-    def login_user(self, username, password, ip="", port=0)-> dict:
+    def login_user(self, username, password, ip="", port=0)-> ApiResponse:
         try:
             user = self.repo.find_by_username(username)
 
             if not user:
-                return {"message": "El usuario no existe", "status": 500}
+                return ApiResponse("El usuario no existe", 500)
             
             if password != user.password:
-                return {"message": 'Contraseña incorrecta', "status": 409}
+                return ApiResponse('Contraseña incorrecta', 409)
             
             if user.status == "online":
-                return {
-                    "message": "Sesión ya iniciada",
-                    "status": 403
-                }
+                return ApiResponse("Sesión ya iniciada", 403)
             
             user.ip = ip
             user.port = port
             user.status = "online"
             user.last_seen = datetime.now()
             self.repo.update_user(user)
-            return {"message": 'Login exitoso', "status": 200}
+            return ApiResponse('Login exitoso', 200)
         except Exception as e:
-            return {"message": str(e), "status": 500}
+            return ApiResponse(str(e), 500)
         
-    def update_status(self, username: str, status: Literal["online", "offline"]):
+    def update_status(
+            self, username: str, status: Literal["online", "offline"]
+    ) -> ApiResponse:
         try:
             user = self.repo.find_by_username(username)
             if not user:
-                return {"message": "El usuario no existe", "status": 500}
+                return ApiResponse("El usuario no existe", 500)
             user.status = status
             self.repo.update_user(user)
-            return {"message": 'Estado actualizado exitosamente', "status": 200}
+            return ApiResponse('Estado actualizado exitosamente', 200)
         except Exception as e:
-            return {"message": str(e), "status": 500}
+            return ApiResponse(str(e), 500)
     
-    def update_ip_address(self, username: str, ip: str):
+    def update_ip_address(self, username: str, ip: str) -> ApiResponse:
         try:
             user = self.repo.find_by_username(username)
             if not user:
-                return {"message": "El usuario no existe", "status": 500}
+                return ApiResponse("El usuario no existe", 500)
             user.ip = ip
             self.repo.update_user(user)
-            return {"message": 'IP actualizada exitosamente', "status": 200}
+            return ApiResponse('IP actualizada exitosamente', 200)
         except Exception as e:
-            return {"message": str(e), "status": 500}
+            return ApiResponse(str(e), 500)
         
-    def update_last_seen(self, username: str):
+    def update_last_seen(self, username: str) -> ApiResponse:
         try:
             user = self.repo.find_by_username(username)
             if not user:
-                return {"message": "El usuario no existe", "status": 500}
+                return ApiResponse("El usuario no existe", 500)
             user.last_seen = datetime.now()
             self.repo.update_user(user)
-            return {"message": 'Última vez actualizada exitosamente', "status": 200}
+            return ApiResponse('Última vez actualizada exitosamente', 200)
         except Exception as e:
-            return {"message": str(e), "status": 500}
+            return ApiResponse(str(e), 500)
     
-    def get_peers(self) -> list[dict]:
+    def get_peers(self) -> ApiResponse:
         users = self.repo.list_all()
-        return [
+        peers = [
             {"username": u.username, "ip": u.ip, "port": u.port}
             for u in users if u.ip and u.port
         ]
+        return ApiResponse(peers, 200)
 
-    def list_usernames(self) -> list[dict]:
+    def list_usernames(self) -> ApiResponse:
         users = self.repo.list_all()
-        return [{"username": u.username} for u in users]
+        usernames = [{"username": u.username} for u in users]
+        return ApiResponse(usernames, 200)
     
     def list_all(self) -> list[User]:
         return self.repo.list_all()
     
-    def get_user_by_username(self, username: str) -> dict:
+    def get_user_by_username(self, username: str) -> ApiResponse:
         try:
             user = self.repo.find_by_username(username)
-            return {"message": user.model_dump(mode="json"), "status": 200}
+            return ApiResponse(user.model_dump(mode="json"), 200)
         except Exception as e:
-            return {"message": str(e), "status": 500}
+            return ApiResponse(str(e), 500)
