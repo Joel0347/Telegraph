@@ -109,7 +109,7 @@ class ApiHandlerService():
     def get_peer_address(self, username: str) -> Optional[tuple]:
         try:
             res = self._send_request("GET", "/peers")
-            peers: list[dict] = res.json().get("peers", [])
+            peers: list[dict] = res.json().get("message", [])
             peer = next((p for p in peers if p["username"] == username), None)
             if peer:
                 return peer.get("ip"), peer.get("port")
@@ -121,7 +121,10 @@ class ApiHandlerService():
         try:
             res = self._send_request("GET", "/users")
             if res.json()["status"] == 200:
-                return [u["username"] for u in res.json()['usernames'] if u["username"] != username]
+                return [
+                    u["username"] for u in res.json()['message'] \
+                        if u["username"] != username
+                ]
             else:
                 publish_status(res.json())
                 return []
