@@ -16,33 +16,6 @@ class AuthService:
         return cls._instance
 
 
-    @staticmethod
-    def hash_password(plaintext_password: str) -> str:
-        """
-        Hashes a plaintext password using bcrypt and returns the hashed password as a UTF-8 string.
-
-        Args:
-            planetext_password (str): The plaintext password to hash.
-
-        Returns:
-            str: The bcrypt-hashed password.
-        """
-        return hashpw(plaintext_password.encode('utf-8'), gensalt()).decode('utf-8')
-
-    @staticmethod
-    def check_password(plain_pwd: str, hashed_pwd: str) -> bool:
-        """
-        Checks whether a password is correct or not.
-
-        Args:
-            plain_pwd (str): The plain password inserted by user.
-            hashed_pwd (str): The hashed password saved in database.
-
-        Returns:
-            bool: `True` if `plain_pwd` is the correct password, otherwise `False`
-        """
-        return checkpw(plain_pwd.encode('utf-8'), hashed_pwd.encode('utf-8'))
-
     def register_user(self, username: str, password: str, ip: str = "", port: int = 0) -> dict:
         try:
             if not username or not password:
@@ -57,7 +30,7 @@ class AuthService:
 
             user = User(
                 username=username, ip=ip, port=port, status="online",
-                password=AuthService.hash_password(password),
+                password=password,
                 last_seen=datetime.now()
             )
 
@@ -78,7 +51,7 @@ class AuthService:
             if not user:
                 return {"message": "El usuario no existe", "status": 500}
             
-            if not AuthService.check_password(password, user.password):
+            if password != user.password:
                 return {"message": 'Contraseña incorrecta', "status": 409}
             
             if user.status == "online":
@@ -128,7 +101,6 @@ class AuthService:
             return {"message": 'Última vez actualizada exitosamente', "status": 200}
         except Exception as e:
             return {"message": str(e), "status": 500}
-
     
     def get_peers(self) -> list[dict]:
         users = self.repo.list_all()

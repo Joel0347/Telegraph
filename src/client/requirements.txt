@@ -3,4 +3,5 @@ streamlit
 requests
 streamlit_autorefresh
 pydantic
+bcrypt
 apscheduler

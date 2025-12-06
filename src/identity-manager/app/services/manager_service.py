@@ -17,8 +17,8 @@ class ManagerService():
     _log_service: LogService = None
     _state_service: StateService = None
     _managers_ips: list[str] = None
-    leader_ip: str = None
-    current_term: int = None
+    _leader_ip: str = None
+    _current_term: int = None
     _heartbeat_stop: threading.Event = None
     _heartbeat_thread = None
     _status: NodeState = None
@@ -81,11 +81,11 @@ class ManagerService():
         current_state = self._state_service.load()
         if current_state["status"] == 200:
             state_data: dict = current_state["message"]
-            self.current_term = state_data.get("current_term", 0)
+            self._current_term = state_data.get("current_term", 0)
             self._voted_for = state_data.get("voted_for", None)
             self._commit_index = state_data.get("commit_index", -1)
             self._last_applied = state_data.get("last_applied", -1)
-            self.logger.info(f"Loaded state: term={self.current_term}, voted_for={self._voted_for}, "
+            self.logger.info(f"Loaded state: term={self._current_term}, voted_for={self._voted_for}, "
                 f"commit_index={self._commit_index}, last_applied={self._last_applied}")
 
         self._log = self._log_service.list_all()
@@ -93,7 +93,7 @@ class ManagerService():
 
     def _save_persistent_state(self):
         payload = {
-            "current_term": self.current_term,
+            "current_term": self._current_term,
             "voted_for": self._voted_for,
             "commit_index": self._commit_index,
             "last_applied": self._last_applied
@@ -113,7 +113,7 @@ class ManagerService():
         
     def update_term_and_vote(self, term: int, voted_for: str = None):
         """Actualiza el término y voto de manera persistente"""
-        self.current_term = term
+        self._current_term = term
         self._voted_for = voted_for
         self._save_persistent_state()
         self.logger.info(f"Updated term to {term}, voted_for: {voted_for}")
@@ -140,7 +140,7 @@ class ManagerService():
             
         self.logger.info("Election timeout - starting new election")
         self._status = NodeState.CANDIDATE
-        self.current_term += 1
+        self._current_term += 1
         self._voted_for = self._node_id
         self._save_persistent_state()
         
@@ -165,7 +165,7 @@ class ManagerService():
             response = requests.post(
                 f"{peer_url}/request_vote",
                 json={
-                    "term": self.current_term,
+                    "term": self._current_term,
                     "candidate_id": self._node_id,
                     "last_log_index": len(self._log) - 1,
                     "last_log_term": self._log[-1]["term"] if self._log else 0
@@ -179,11 +179,11 @@ class ManagerService():
     
     def become_leader(self):
         """Convierte el nodo en líder"""
-        self.logger.info(f"Becoming leader for term {self.current_term}")
+        self.logger.info(f"Becoming leader for term {self._current_term}")
         self._status = NodeState.LEADER
-        self.leader_ip = get_local_ip()
-        self._send_request_to_all_managers("POST", f"/new_leader/{self.leader_ip}")
-        self._send_request_to_all_clients("POST", f"/new_leader/{self.leader_ip}")
+        self._leader_ip = get_local_ip()
+        self._send_request_to_all_managers("POST", f"/new_leader/{self._leader_ip}")
+        self._send_request_to_all_clients("POST", f"/new_leader/{self._leader_ip}")
         # logica para expandir la noticia de mi liderazgo a los clientes
         
         # Inicializar estado del líder
@@ -228,7 +228,7 @@ class ManagerService():
             response = requests.post(
                 f"{peer_url}/append_entries",
                 json={
-                    "term": self.current_term,
+                    "term": self._current_term,
                     "leader_id": self._node_id,
                     "prev_log_index": prev_log_index,
                     "prev_log_term": prev_log_term,
@@ -266,15 +266,15 @@ class ManagerService():
         last_log_term = data["last_log_term"]
         
         # Verificar term
-        if term < self.current_term:
+        if term < self._current_term:
             self.logger.debug(
                 f"Rejecting vote request from {candidate_id}: term {term}" +
-                f" < current term {self.current_term}"
+                f" < current term {self._current_term}"
             )
-            return {"term": self.current_term, "vote_granted": False}
+            return {"term": self._current_term, "vote_granted": False}
         
         # Actualizar term si es necesario
-        if term > self.current_term:
+        if term > self._current_term:
             self.update_term_and_vote(term)
             self._status = NodeState.FOLLOWER
             self._voted_for = None
@@ -289,10 +289,10 @@ class ManagerService():
             self._save_persistent_state()
             self.reset_election_timer()
             self.logger.info(f"Voted for {candidate_id} in term {term}")
-            return {"term": self.current_term, "vote_granted": True}
+            return {"term": self._current_term, "vote_granted": True}
         else:
             self.logger.debug(f"Rejecting vote request from {candidate_id}: voting conditions not met")
-            return {"term": self.current_term, "vote_granted": False}
+            return {"term": self._current_term, "vote_granted": False}
 
     def is_candidate_log_up_to_date(self, last_log_index: int, last_log_term: int) -> bool:
         """Verifica si el log del candidato está actualizado"""
@@ -319,18 +319,18 @@ class ManagerService():
         leader_commit = data["leader_commit"]
         
         # Verificar term
-        if term < self.current_term:
+        if term < self._current_term:
             self.logger.debug(
                 f"Rejecting AppendEntries from {leader_id}: term {term}" +
-                f" < current term {self.current_term}"
+                f" < current term {self._current_term}"
             )
-            return {"term": self.current_term, "success": False}
+            return {"term": self._current_term, "success": False}
         
         # Reiniciar election timer
         self.reset_election_timer()
         
         # Convertirse en follower si es necesario
-        if term > self.current_term:
+        if term > self._current_term:
             self.update_term_and_vote(term)
             self._status = NodeState.FOLLOWER
             self._voted_for = None
@@ -339,7 +339,7 @@ class ManagerService():
         if prev_log_index >= 0:
             if prev_log_index >= len(self._log) or self._log[prev_log_index]["term"] != prev_log_term:
                 self.logger.debug(f"Log inconsistency at index {prev_log_index}")
-                return {"term": self.current_term, "success": False}
+                return {"term": self._current_term, "success": False}
         
         # Añadir entradas al log con persistencia
         if entries:
@@ -363,7 +363,7 @@ class ManagerService():
             self.apply_committed_entries()
             self._save_persistent_state()  # Persistir nuevo commit y last_applied
         
-        return {"term": self.current_term, "success": True}
+        return {"term": self._current_term, "success": True}
     
     def handle_client_request(self, op: str, args: dict) -> dict:
         """Maneja solicitudes de clientes para añadir datos al log"""
@@ -380,7 +380,7 @@ class ManagerService():
         try:
             # Crear nueva entrada de log
             new_entry = {
-                "term": self.current_term,
+                "term": self._current_term,
                 "index": len(self._log),
                 "op": op,
                 "args": args,
@@ -430,7 +430,7 @@ class ManagerService():
             response = requests.post(
                 f"{peer_url}/append_entries",
                 json={
-                    "term": self.current_term,
+                    "term": self._current_term,
                     "leader_id": self._node_id,
                     "prev_log_index": entry["index"] - 1,
                     "prev_log_term": self._log[entry["index"] - 1]["term"] if entry["index"] > 0 else 0,
@@ -519,16 +519,16 @@ class ManagerService():
         self._managers_ips.remove(get_local_ip())
     
     def _find_network_leader(self) -> str:
-        if self.leader_ip:
-            return self.leader_ip
+        if self._leader_ip:
+            return self._leader_ip
         
         try:
             res = self._send_request_to_all_managers("GET", f"/managers/leader")
             if res.json()["status"] == 200:
-                self.leader_ip = res.json()["message"]
-                return self.leader_ip
+                self._leader_ip = res.json()["message"]
+                return self._leader_ip
             else:
-                self.leader_ip = None
+                self._leader_ip = None
             publish_status(res.json())
         except Exception as e:
             publish_status({'message': f"Error inesperado {str(e)}", 'status': 500})
@@ -587,7 +587,7 @@ class ManagerService():
             return {"message": f"ERROR: {str(e)}", "status": 500}
     
     def get_leader(self) -> str:
-        if leader := self.leader_ip:
+        if leader := self._leader_ip:
             return {"message": leader, "status": 200}
         else:
             return {"message": f"No leader known yet", "status": 404}
@@ -602,7 +602,7 @@ class ManagerService():
         
     def update_leader(self, new_leader_addr: str):
         try:
-            self.leader_ip = new_leader_addr
+            self._leader_ip = new_leader_addr
             return {"message": "Leader updated succesfully", "status": 200}
         except Exception as e:
             return {"message": f"Error updating leader: {e}", "status": 500}

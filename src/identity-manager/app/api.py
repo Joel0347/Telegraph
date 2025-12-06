@@ -179,7 +179,7 @@ def status():
     return jsonify({
         "node_id": mng_service._node_id,
         "state": mng_service._status.value,
-        "current_term": mng_service.current_term,
+        "current_term": mng_service._current_term,
         "commit_index": mng_service._commit_index,
         "log_length": len(mng_service._log),
         "peers": mng_service._managers_ips

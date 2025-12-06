@@ -1,6 +1,7 @@
 import requests, os, json, socket
 from typing import Optional, Literal
-from helpers import publish_status, get_local_ip, get_local_port, get_overlay_network
+from helpers import publish_status, get_local_ip, get_local_port, \
+    get_overlay_network, hash_password
 
 
 class ApiHandlerService():
@@ -108,7 +109,7 @@ class ApiHandlerService():
     def get_peer_address(self, username: str) -> Optional[tuple]:
         try:
             res = self._send_request("GET", "/peers")
-            peers = res.json().get("peers", [])
+            peers: list[dict] = res.json().get("peers", [])
             peer = next((p for p in peers if p["username"] == username), None)
             if peer:
                 return peer.get("ip"), peer.get("port")
@@ -184,7 +185,7 @@ class ApiHandlerService():
         try:
             res = self._send_request("POST", f"/{action}", json={
                 "username": username,
-                "password": pwd,
+                "password": hash_password(pwd),
                 "ip": get_local_ip(),
                 "port": get_local_port(),
                 "status": "online"
