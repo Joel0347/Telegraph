@@ -1,4 +1,5 @@
 import requests, os, json, socket, random, time, threading, logging
+from threading import Lock
 from enum import Enum
 from typing import Dict, Any
 from helpers import publish_status, get_local_ip, get_overlay_network
@@ -35,11 +36,13 @@ class ManagerService():
     _commit_index: int = None
     _last_applied: int = None
     _dispatcher: Dispatcher = None
+    _lock: Lock = None
     
     def __new__(cls, dispatcher: Dispatcher):
         if cls._instance is None:
             cls._instance = super(ManagerService, cls).__new__(cls)
             cls._instance._k = int(os.getenv("K", "2")) # parametrizable
+            cls._instance._lock = Lock()
             cls._instance._dispatcher = dispatcher
             cls._instance._node_id = get_local_ip()
             cls._instance._port = 8000
@@ -378,47 +381,48 @@ class ManagerService():
                 return {"succes": False, "message": "no_leader_available"}
         
         try:
-            # Crear nueva entrada de log
-            new_entry = {
-                "term": self._current_term,
-                "index": len(self._log),
-                "op": op,
-                "args": args,
-                "applied": False
-            }
-            
-            # Añadir al log local
-            self._save_log_entry(new_entry)
-            self.logger.info(f"Added client data to log at index {new_entry['index']}")
-            
-            # Replicar a los followers
-            success_count = 1  # Contamos al líder mismo
-            
-            for peer in self._managers_ips:
-                if self.replicate_to_follower(peer, new_entry):
-                    success_count += 1
-            
-            # Verificar si se alcanzó la mayoría
-            if success_count > self._k:
-                # Commit la entrada en el líder
-                self._commit_index = new_entry["index"]
-                self.apply_committed_entries()
-                self._save_persistent_state()  # comprometer commit/last_applied en disco
-
-                # Propagar inmediatamente el nuevo commit a los followers (AppendEntries vacío)
+            with self._lock:
+                # Crear nueva entrada de log
+                new_entry = {
+                    "term": self._current_term,
+                    "index": len(self._log),
+                    "op": op,
+                    "args": args,
+                    "applied": False
+                }
+                
+                # Añadir al log local
+                self._save_log_entry(new_entry)
+                self.logger.info(f"Added client data to log at index {new_entry['index']}")
+                
+                # Replicar a los followers
+                success_count = 1  # Contamos al líder mismo
+                
                 for peer in self._managers_ips:
-                    threading.Thread(target=self.send_append_entries, args=(peer,), daemon=True).start()
+                    if self.replicate_to_follower(peer, new_entry):
+                        success_count += 1
+                
+                # Verificar si se alcanzó la mayoría
+                if success_count > self._k:
+                    # Commit la entrada en el líder
+                    self._commit_index = new_entry["index"]
+                    self.apply_committed_entries()
+                    self._save_persistent_state()  # comprometer commit/last_applied en disco
 
-                self.logger.info(f"Successfully committed client data at index {new_entry['index']}")
-                return {"success": True, "message": ""}
-            else:
-                self._log_service.delete_log_by_index(new_entry['index'])
-                self._log.pop()
-                self.logger.error(
-                    "Failed to replicate client data to majority, " + 
-                    f"reverted entry at index {new_entry['index']}"
-                )
-                return {"success": False, "message": "Failed when replicating"}
+                    # Propagar inmediatamente el nuevo commit a los followers (AppendEntries vacío)
+                    for peer in self._managers_ips:
+                        threading.Thread(target=self.send_append_entries, args=(peer,), daemon=True).start()
+
+                    self.logger.info(f"Successfully committed client data at index {new_entry['index']}")
+                    return {"success": True, "message": ""}
+                else:
+                    self._log_service.delete_log_by_index(new_entry['index'])
+                    self._log.pop()
+                    self.logger.error(
+                        "Failed to replicate client data to majority, " + 
+                        f"reverted entry at index {new_entry['index']}"
+                    )
+                    return {"success": False, "message": "Failed when replicating"}
             
         except Exception as e:
             return {"success": False, "message": f"{e}"}

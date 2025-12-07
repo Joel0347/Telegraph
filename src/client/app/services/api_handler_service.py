@@ -57,7 +57,7 @@ class ApiHandlerService():
     def _send_request(self, method: str, path: str, **kwargs) -> requests.Response:
         res = requests.Response()
         res.status_code = 503
-        res._content = b'{"message":"No leader disponible", "status": 500}'
+        res._content = b'{"message":"No hay lider disponible", "status": 500}'
         res.headers['Content-Type'] = 'application/json'
         api_port = int(os.getenv("API_PORT", "8000"))
         
