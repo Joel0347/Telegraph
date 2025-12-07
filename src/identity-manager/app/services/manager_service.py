@@ -173,7 +173,7 @@ class ManagerService():
                     "last_log_index": len(self._log) - 1,
                     "last_log_term": self._log[-1]["term"] if self._log else 0
                 },
-                timeout=3.0
+                timeout=10
             )
             return response.json().get("vote_granted", False)
         except Exception as e:
@@ -238,7 +238,7 @@ class ManagerService():
                     "entries": entries,
                     "leader_commit": self._commit_index
                 },
-                timeout=5.0
+                timeout=10
             )
             
             if response.status_code == 200:
@@ -441,7 +441,7 @@ class ManagerService():
                     "entries": [entry],
                     "leader_commit": self._commit_index
                 },
-                timeout=3.0
+                timeout=10
             )
             success = response.json().get("success", False)
             if success:
@@ -558,7 +558,7 @@ class ManagerService():
             try:
                 tmp_res = requests.request(
                     method, f"http://{manager}:{api_port}{path}",
-                    timeout=2, **kwargs
+                    timeout=10, **kwargs
                 )
 
                 if tmp_res.json()["status"] == 200:

@@ -1,4 +1,5 @@
 import socket, fcntl, struct, ipaddress, logging
+from bcrypt import checkpw, hashpw, gensalt
 
 logging.basicConfig(level=logging.INFO)
 
@@ -38,3 +39,28 @@ def publish_status(response: dict):
         logging.info(response['message'])
     else:
         logging.info(response['message'])
+        
+def hash_password(plaintext_password: str) -> str:
+    """
+    Hashes a plaintext password using bcrypt and returns the hashed password as a UTF-8 string.
+
+    Args:
+        planetext_password (str): The plaintext password to hash.
+
+    Returns:
+        str: The bcrypt-hashed password.
+    """
+    return hashpw(plaintext_password.encode('utf-8'), gensalt()).decode('utf-8')
+
+def check_password(plain_pwd: str, hashed_pwd: str) -> bool:
+    """
+    Checks whether a password is correct or not.
+
+    Args:
+        plain_pwd (str): The plain password inserted by user.
+        hashed_pwd (str): The hashed password saved in database.
+
+    Returns:
+        bool: `True` if `plain_pwd` is the correct password, otherwise `False`
+    """
+    return checkpw(plain_pwd.encode('utf-8'), hashed_pwd.encode('utf-8'))

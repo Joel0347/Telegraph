@@ -1,7 +1,6 @@
 import requests, os, json, socket
 from typing import Optional, Literal
-from helpers import publish_status, get_local_ip, get_local_port, \
-    get_overlay_network, hash_password
+from helpers import publish_status, get_local_ip, get_local_port, get_overlay_network
 
 
 class ApiHandlerService():
@@ -67,7 +66,7 @@ class ApiHandlerService():
                 
             res = requests.request(
                 method, f"http://{self.manager_leader_addr}:{api_port}{path}",
-                timeout=2, **kwargs
+                timeout=10, **kwargs
             )
         except Exception as e:
             ## comentar esta linea para no mostrar los managers caidos
@@ -91,7 +90,7 @@ class ApiHandlerService():
             try:
                 tmp_res = requests.request(
                     method, f"http://{base_url}:{api_port}{path}",
-                    timeout=2, **kwargs
+                    timeout=10, **kwargs
                 )
 
                 if tmp_res.json()["status"] == 200:
@@ -188,7 +187,7 @@ class ApiHandlerService():
         try:
             res = self._send_request("POST", f"/{action}", json={
                 "username": username,
-                "password": hash_password(pwd),
+                "password": pwd,
                 "ip": get_local_ip(),
                 "port": get_local_port(),
                 "status": "online"

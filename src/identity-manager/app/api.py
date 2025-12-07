@@ -54,7 +54,7 @@ def intercept_requests():
                     method=request.method,
                     url=forward_url,
                     json=args,
-                    timeout=2
+                    timeout=10
                 )
                 return jsonify(forwarded.json())
             except Exception as e:

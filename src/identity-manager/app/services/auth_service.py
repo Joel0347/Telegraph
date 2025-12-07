@@ -1,6 +1,7 @@
 from typing import Literal
 from repositories.user_repo import UserRepository
 from models.user import User
+from helpers import check_password, hash_password
 from datetime import datetime
 
 
@@ -35,7 +36,7 @@ class AuthService:
 
             user = User(
                 username=username, ip=ip, port=port, status="online",
-                password=password,
+                password=hash_password(password),
                 last_seen=datetime.now()
             )
 
@@ -53,7 +54,7 @@ class AuthService:
             if not user:
                 return ApiResponse("El usuario no existe", 500)
             
-            if password != user.password:
+            if not check_password(password, user.password):
                 return ApiResponse('Contraseña incorrecta', 409)
             
             if user.status == "online":
