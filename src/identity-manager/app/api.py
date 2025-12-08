@@ -25,12 +25,8 @@ def intercept_requests():
         "register",
         "login",
         "logout",
-        "get_peers",
-        "list_users",
-        "find_by_username",
         "notify_online",
         "heartbeat",
-        "is_user_active",
         "update_ip_address",
     }
 
@@ -182,7 +178,7 @@ def status():
         "current_term": mng_service._current_term,
         "commit_index": mng_service._commit_index,
         "log_length": len(mng_service._log),
-        "peers": mng_service._managers_ips
+        "peers": list(mng_service._managers_ips)
     })
     
 @app.route('/append_entries', methods=['POST'])

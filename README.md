@@ -132,7 +132,7 @@ docker run --rm \
   --network <network_name> \
   --network-alias identity-manager \
   -v $(pwd)/identity-manager/app:/app \
-  -v $(pwd)/volumes/identity-data:/data \
+  -v $(pwd)/volumes/identity-data-<i>:/data \
   -p <port_on_host>:8000 \
   -e UDP_PORT=5353 \
   -e K=2 \
@@ -161,17 +161,37 @@ docker rm -f <container_name>
 
 ### Create connection using Swarm
 
-1. Initialize Swarm
+1. Establish a stable connection and find IP address
+
+Run:
+```bash
+ifconfig
+``` 
+in order to find the correct interface and address
+
+Note: if connection is via ethernet point to point, try setting fixed ip addresses in
+both hosts:
+
+```bash
+sudo ip addr add <ip>/<mask> dev <interface>
+```
+```bash
+sudo ip link set <interface> up
+```
+
+Then, check connectivity between hosts using `ping` command.
+
+2. Initialize Swarm
 ```bash
 docker swarm init --advertise-addr <IP_ADDR>
 ```
 
-2. Get manager token
+3. Get manager token
 ```bash
 docker swarm join-token manager
 ```
 
-3. Copy the command given and paste it in the other computer
+4. Copy the command given and paste it in the other computer
 
 
 ### Debug manager status
