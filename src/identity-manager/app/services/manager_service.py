@@ -17,7 +17,7 @@ class ManagerService():
     _instance = None
     _log_service: LogService = None
     _state_service: StateService = None
-    _managers_ips: list[str] = None
+    _managers_ips: set[str] = None
     _leader_ip: str = None
     _current_term: int = None
     _heartbeat_stop: threading.Event = None
@@ -91,7 +91,7 @@ class ManagerService():
             self.logger.info(f"Loaded state: term={self._current_term}, voted_for={self._voted_for}, "
                 f"commit_index={self._commit_index}, last_applied={self._last_applied}")
 
-        self._log = self._log_service.list_all()
+        self._log = [log.model_dump(mode="json") for log in self._log_service.list_all()]
         self.logger.info(f"Loaded log with {len(self._log)} entries")
 
     def _save_persistent_state(self):
@@ -162,22 +162,23 @@ class ManagerService():
             self._status = NodeState.FOLLOWER
             self.reset_election_timer()
     
-    def request_vote(self, peer_url: str) -> bool:
+    def request_vote(self, peer_ip: str) -> bool:
         """Solicita voto a un nodo peer"""
         try:
+            peer_port = 8000
             response = requests.post(
-                f"{peer_url}/request_vote",
+                f"http://{peer_ip}:{peer_port}/request_vote",
                 json={
                     "term": self._current_term,
                     "candidate_id": self._node_id,
                     "last_log_index": len(self._log) - 1,
                     "last_log_term": self._log[-1]["term"] if self._log else 0
                 },
-                timeout=10
+                timeout=3.0
             )
             return response.json().get("vote_granted", False)
         except Exception as e:
-            self.logger.debug(f"Failed to request vote from {peer_url}: {e}")
+            self.logger.debug(f"Failed to request vote from {peer_ip}: {e}")
             return False
     
     def become_leader(self):
@@ -219,17 +220,18 @@ class ManagerService():
         self._heartbeat_thread = threading.Thread(target=loop, daemon=True)
         self._heartbeat_thread.start()
         
-    def send_append_entries(self, peer_url: str):
+    def send_append_entries(self, peer_ip: str):
         """Envía AppendEntries RPC a un follower"""
         try:
-            next_index = self._next_index.get(peer_url, 0)
+            peer_port = 8000
+            next_index = self._next_index.get(peer_ip, 0)
             prev_log_index = next_index - 1
             prev_log_term = self._log[prev_log_index]["term"] if prev_log_index >= 0 else 0
             
             entries = self._log[next_index:] if next_index < len(self._log) else []
             
             response = requests.post(
-                f"{peer_url}/append_entries",
+                f"http://{peer_ip}:{peer_port}/append_entries",
                 json={
                     "term": self._current_term,
                     "leader_id": self._node_id,
@@ -238,27 +240,26 @@ class ManagerService():
                     "entries": entries,
                     "leader_commit": self._commit_index
                 },
-                timeout=10
+                timeout=3.0
             )
             
             if response.status_code == 200:
                 result = response.json()
                 if result.get("success"):
-                    self._next_index[peer_url] = next_index + len(entries)
-                    self._match_index[peer_url] = self._next_index[peer_url] - 1
+                    self._next_index[peer_ip] = next_index + len(entries)
+                    self._match_index[peer_ip] = self._next_index[peer_ip] - 1
                     self.logger.debug(
-                        f"AppendEntries successful for {peer_url},"
-                        f"next_index: {self._next_index[peer_url]}"
+                        f"AppendEntries successful for {peer_ip},"
+                        f"next_index: {self._next_index[peer_ip]}"
                     )
                 else:
-                    self._next_index[peer_url] = max(0, next_index - 1)
+                    self._next_index[peer_ip] = max(0, next_index - 1)
                     self.logger.debug(
-                        f"AppendEntries failed for {peer_url}, decrementing next_index to " +
-                        f"{self._next_index[peer_url]}"
+                        f"AppendEntries failed for {peer_ip}, decrementing next_index to " +
+                        f"{self._next_index[peer_ip]}"
                     )
-                    
         except Exception as e:
-            self.logger.error(f"Error sending append entries to {peer_url}: {e}")
+            self.logger.error(f"Error sending append entries to {peer_ip}: {e}")
 
 
     def handle_request_vote(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -428,11 +429,12 @@ class ManagerService():
             return {"success": False, "message": f"{e}"}
         
         
-    def replicate_to_follower(self, peer_url: str, entry: Dict[str, Any]) -> bool:
+    def replicate_to_follower(self, peer_ip: str, entry: Dict[str, Any]) -> bool:
         """Replica una entrada a un follower específico"""
         try:
+            peer_port = 8000
             response = requests.post(
-                f"{peer_url}/append_entries",
+                f"http://{peer_ip}:{peer_port}/append_entries",
                 json={
                     "term": self._current_term,
                     "leader_id": self._node_id,
@@ -441,16 +443,16 @@ class ManagerService():
                     "entries": [entry],
                     "leader_commit": self._commit_index
                 },
-                timeout=10
+                timeout=3.0
             )
             success = response.json().get("success", False)
             if success:
-                self.logger.debug(f"Successfully replicated to {peer_url}")
+                self.logger.debug(f"Successfully replicated to {peer_ip}")
             else:
-                self.logger.debug(f"Failed to replicate to {peer_url}")
+                self.logger.debug(f"Failed to replicate to {peer_ip}")
             return success
         except Exception as e:
-            self.logger.debug(f"Error replicating to {peer_url}: {e}")
+            self.logger.debug(f"Error replicating to {peer_ip}: {e}")
             return False
         
     def apply_committed_entries(self):
@@ -519,7 +521,7 @@ class ManagerService():
                 except Exception:
                     continue
 
-        self._managers_ips = list(managers)
+        self._managers_ips = managers
         self._managers_ips.remove(get_local_ip())
     
     def _find_network_leader(self) -> str:
@@ -558,7 +560,7 @@ class ManagerService():
             try:
                 tmp_res = requests.request(
                     method, f"http://{manager}:{api_port}{path}",
-                    timeout=10, **kwargs
+                    timeout=2, **kwargs
                 )
 
                 if tmp_res.json()["status"] == 200:
@@ -585,7 +587,7 @@ class ManagerService():
         
     def add_new_manager(self, ip: str):
         try:
-            self._managers_ips.append(ip)
+            self._managers_ips.add(ip)
             return {"message": "OK", "status": 200}
         except Exception as e:
             return {"message": f"ERROR: {str(e)}", "status": 500}
