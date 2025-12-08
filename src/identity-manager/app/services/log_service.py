@@ -28,6 +28,23 @@ class LogService:
         except Exception as e:
             return {"message": str(e), "status": 500}
     
+    def add_logs_batch(self, payloads: list[dict]) -> dict:
+        try:
+            logs = [
+                Log(
+                    term=p['term'],
+                    index=p['index'],
+                    op=p['op'],
+                    args=p['args'],
+                    applied=p['applied']
+                )
+                for p in payloads
+            ]
+            self.repo.add_logs_batch(logs)
+            return {"message": f'{len(logs)} logs agregados exitosamente', "status": 200}
+        except Exception as e:
+            return {"message": str(e), "status": 500}
+        
     def delete_log_by_index(self, index: int):
         self.repo.delete_log_by_index(index)
         

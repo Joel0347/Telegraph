@@ -57,6 +57,17 @@ class LogRepository:
             
             raw.append(log.model_dump(mode="json"))
             self._write_all(raw)
+    
+    # En LogRepository
+    def add_logs_batch(self, logs: list[Log]):
+        with self._lock:
+            raw = self._read_all()
+            for log in logs:
+                if any(l.get("index") == log.index for l in raw):
+                    raise ValueError(f"Log ya existe: index={log.index}")
+                raw.append(log.model_dump(mode="json"))
+            self._write_all(raw)
+
             
     def delete_log_by_index(self, index: int):
         logs = self.list_all()

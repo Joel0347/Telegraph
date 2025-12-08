@@ -37,12 +37,14 @@ class ManagerService():
     _last_applied: int = None
     _dispatcher: Dispatcher = None
     _lock: Lock = None
-    
+    _peer_locks: dict[str, Lock] = None
+
     def __new__(cls, dispatcher: Dispatcher):
         if cls._instance is None:
             cls._instance = super(ManagerService, cls).__new__(cls)
             cls._instance._k = int(os.getenv("K", "2")) # parametrizable
             cls._instance._lock = Lock()
+            cls._instance._peer_locks = {}
             cls._instance._dispatcher = dispatcher
             cls._instance._node_id = get_local_ip()
             cls._instance._port = 8000
@@ -61,7 +63,7 @@ class ManagerService():
             cls._instance._match_index = {}
             
             # Election timeout (alineado con heartbeats)
-            cls._instance._election_timeout = random.uniform(3.0, 5.0)
+            cls._instance._election_timeout = random.uniform(8.0, 10.0)
             cls._instance._last_heartbeat = time.time()
 
             # Heartbeat loop
@@ -79,6 +81,11 @@ class ManagerService():
         )
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Logging configured for node {self._node_id}")
+    
+    def _get_peer_lock(self, ip: str) -> Lock:
+        if ip not in self._peer_locks:
+            self._peer_locks[ip] = Lock()
+        return self._peer_locks[ip]
     
     def _load_persistent_state(self):
         current_state = self._state_service.load()
@@ -125,13 +132,14 @@ class ManagerService():
         """Inicia el nodo Raft"""
         self.logger.info(f"Starting Raft node {self._node_id} on port {self._port}")
         self.reset_election_timer()
+        self.start_discovery_loop(interval=5.0)
     
     def reset_election_timer(self):
         """Reinicia el temporizador de elección"""
         if self._election_timer:
             self._election_timer.cancel()
         
-        self._election_timeout = random.uniform(3.0, 5.0)
+        self._election_timeout = random.uniform(8.0, 10.0)
         self._election_timer = threading.Timer(self._election_timeout, self.start_election)
         self._election_timer.start()
         self.logger.debug("Election timer reset")
@@ -151,7 +159,7 @@ class ManagerService():
         votes_received = 1
         
         # Solicitar votos de otros nodos
-        for peer in self._managers_ips:
+        for peer in list(self._managers_ips):
             if self.request_vote(peer):
                 votes_received += 1
         
@@ -174,7 +182,7 @@ class ManagerService():
                     "last_log_index": len(self._log) - 1,
                     "last_log_term": self._log[-1]["term"] if self._log else 0
                 },
-                timeout=3.0
+                timeout=5.0
             )
             return response.json().get("vote_granted", False)
         except Exception as e:
@@ -191,14 +199,15 @@ class ManagerService():
         # logica para expandir la noticia de mi liderazgo a los clientes
         
         # Inicializar estado del líder
-        for peer in self._managers_ips:
+        for peer in list(self._managers_ips):
             self._next_index[peer] = len(self._log)
             self._match_index[peer] = 0
         
+        self._maybe_advance_commit_index()
         # Iniciar loop de heartbeats
         self.start_heartbeat_loop(interval=1.0)
     
-    def start_heartbeat_loop(self, interval: float = 1.0):
+    def start_heartbeat_loop(self, interval: float = 3.0):
         """Loop dedicado para enviar heartbeats sin encadenar timers"""
         # Detener loop previo si existe
         self._heartbeat_stop.set()
@@ -207,7 +216,7 @@ class ManagerService():
         def loop():
             while not self._heartbeat_stop.is_set():
                 if self.I_am_leader():
-                    for peer in self._managers_ips:
+                    for peer in list(self._managers_ips):
                         threading.Thread(
                             target=self.send_append_entries,
                             args=(peer,), daemon=True
@@ -222,44 +231,47 @@ class ManagerService():
         
     def send_append_entries(self, peer_ip: str):
         """Envía AppendEntries RPC a un follower"""
-        try:
-            peer_port = 8000
-            next_index = self._next_index.get(peer_ip, 0)
-            prev_log_index = next_index - 1
-            prev_log_term = self._log[prev_log_index]["term"] if prev_log_index >= 0 else 0
-            
-            entries = self._log[next_index:] if next_index < len(self._log) else []
-            
-            response = requests.post(
-                f"http://{peer_ip}:{peer_port}/append_entries",
-                json={
-                    "term": self._current_term,
-                    "leader_id": self._node_id,
-                    "prev_log_index": prev_log_index,
-                    "prev_log_term": prev_log_term,
-                    "entries": entries,
-                    "leader_commit": self._commit_index
-                },
-                timeout=3.0
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if result.get("success"):
-                    self._next_index[peer_ip] = next_index + len(entries)
-                    self._match_index[peer_ip] = self._next_index[peer_ip] - 1
-                    self.logger.debug(
-                        f"AppendEntries successful for {peer_ip},"
-                        f"next_index: {self._next_index[peer_ip]}"
-                    )
-                else:
-                    self._next_index[peer_ip] = max(0, next_index - 1)
-                    self.logger.debug(
-                        f"AppendEntries failed for {peer_ip}, decrementing next_index to " +
-                        f"{self._next_index[peer_ip]}"
-                    )
-        except Exception as e:
-            self.logger.error(f"Error sending append entries to {peer_ip}: {e}")
+        lock = self._get_peer_lock(peer_ip)
+        with lock:
+            try:
+                peer_port = 8000
+                next_index = self._next_index.get(peer_ip, 0)
+                prev_log_index = next_index - 1
+                prev_log_term = self._log[prev_log_index]["term"] if prev_log_index >= 0 else 0
+                
+                entries = self._log[next_index:] if next_index < len(self._log) else []
+                
+                response = requests.post(
+                    f"http://{peer_ip}:{peer_port}/append_entries",
+                    json={
+                        "term": self._current_term,
+                        "leader_id": self._node_id,
+                        "prev_log_index": prev_log_index,
+                        "prev_log_term": prev_log_term,
+                        "entries": entries,
+                        "leader_commit": self._commit_index
+                    },
+                    timeout=5.0
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get("success"):
+                        self._next_index[peer_ip] = next_index + len(entries)
+                        self._match_index[peer_ip] = self._next_index[peer_ip] - 1
+                        self.logger.debug(
+                            f"AppendEntries successful for {peer_ip},"
+                            f"next_index: {self._next_index[peer_ip]}"
+                        )
+                        self._maybe_advance_commit_index()
+                    else:
+                        self._next_index[peer_ip] = max(0, next_index - 1)
+                        self.logger.debug(
+                            f"AppendEntries failed for {peer_ip}, decrementing next_index to " +
+                            f"{self._next_index[peer_ip]}"
+                        )
+            except Exception as e:
+                self.logger.error(f"Error sending append entries to {peer_ip}: {e}")
 
 
     def handle_request_vote(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -354,8 +366,8 @@ class ManagerService():
                 self.logger.info(f"Trimmed log to index {prev_log_index}")
             
             # Añadir nuevas entradas con persistencia
-            for entry in entries:
-                self._save_log_entry(entry)
+            self._log_service.add_logs_batch(entries)
+            self._log.extend(entries) 
             self.logger.info(f"Added {len(entries)} new log entries from leader {leader_id}")
         
         # Actualizar commit index desde el líder y aplicar
@@ -399,22 +411,16 @@ class ManagerService():
                 # Replicar a los followers
                 success_count = 1  # Contamos al líder mismo
                 
-                for peer in self._managers_ips:
+                for peer in list(self._managers_ips):
                     if self.replicate_to_follower(peer, new_entry):
                         success_count += 1
                 
                 # Verificar si se alcanzó la mayoría
                 if success_count > self._k:
                     # Commit la entrada en el líder
-                    self._commit_index = new_entry["index"]
-                    self.apply_committed_entries()
-                    self._save_persistent_state()  # comprometer commit/last_applied en disco
-
-                    # Propagar inmediatamente el nuevo commit a los followers (AppendEntries vacío)
-                    for peer in self._managers_ips:
-                        threading.Thread(target=self.send_append_entries, args=(peer,), daemon=True).start()
-
-                    self.logger.info(f"Successfully committed client data at index {new_entry['index']}")
+                    advanced = self._maybe_advance_commit_index()
+                    if advanced:
+                        self.logger.info(f"Successfully committed client data at index {new_entry['index']}")
                     return {"success": True, "message": ""}
                 else:
                     self._log_service.delete_log_by_index(new_entry['index'])
@@ -433,6 +439,7 @@ class ManagerService():
         """Replica una entrada a un follower específico"""
         try:
             peer_port = 8000
+
             response = requests.post(
                 f"http://{peer_ip}:{peer_port}/append_entries",
                 json={
@@ -443,8 +450,9 @@ class ManagerService():
                     "entries": [entry],
                     "leader_commit": self._commit_index
                 },
-                timeout=3.0
+                timeout=5.0
             )
+
             success = response.json().get("success", False)
             if success:
                 self.logger.debug(f"Successfully replicated to {peer_ip}")
@@ -492,6 +500,46 @@ class ManagerService():
                 
         except Exception as e:
             self.logger.error(f"Error applying entry to state machine: {e}")
+
+    def _maybe_advance_commit_index(self):
+        # Avanza commit_index siguiendo la regla de Raft (solo términos actuales)
+        advanced = False
+        for N in range(self._commit_index + 1, len(self._log)):
+            # Solo considerar entradas del término actual del líder
+            if self._log[N]["term"] != self._current_term:
+                continue
+            # Contar cuántos tienen match_index >= N (líder cuenta 1)
+            count = 1
+            for mi in self._match_index.values():
+                if mi >= N:
+                    count += 1
+            if count > self._k:
+                self._commit_index = N
+                advanced = True
+            else:
+                break
+
+        if advanced and self._last_applied < self._commit_index:
+            self.apply_committed_entries()
+            self._save_persistent_state()
+            # Propagar leader_commit con heartbeats vacíos
+            for peer in list(self._managers_ips):
+                threading.Thread(
+                    target=self.send_append_entries, args=(peer,), daemon=True
+                ).start()
+
+    def start_discovery_loop(self, interval: float = 5.0):
+        """Loop dedicado para refrescar la lista de managers periódicamente"""
+        def loop():
+            while True:
+                try:
+                    self._discover_managers()
+                    self.logger.debug(f"Managers list refreshed: {self._managers_ips}")
+                except Exception as e:
+                    self.logger.error(f"Error discovering managers: {e}")
+                time.sleep(interval)
+
+        threading.Thread(target=loop, daemon=True).start()
 
     # region ======== Codigo del Servicio original =========
     
@@ -556,7 +604,7 @@ class ManagerService():
         res.headers['Content-Type'] = 'application/json'
         api_port = 8000
 
-        for manager in self._managers_ips:
+        for manager in list(self._managers_ips):
             try:
                 tmp_res = requests.request(
                     method, f"http://{manager}:{api_port}{path}",

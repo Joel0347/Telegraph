@@ -66,7 +66,7 @@ class ApiHandlerService():
                 
             res = requests.request(
                 method, f"http://{self.manager_leader_addr}:{api_port}{path}",
-                timeout=10, **kwargs
+                timeout=15, **kwargs
             )
         except Exception as e:
             ## comentar esta linea para no mostrar los managers caidos
