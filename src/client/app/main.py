@@ -63,5 +63,5 @@ elif st.session_state.page == "chat":
             }
         )
         scheduler.start()
-        st.session_state.bg_tasks = True
+        st.session_state.bg_tasks = scheduler
     chat_module.show()

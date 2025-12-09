@@ -204,7 +204,7 @@ class ApiHandlerService():
             current_addr = get_local_ip()
             saved_addr = self.get_peer_address(username)
 
-            if current_addr != saved_addr:
+            if current_addr != saved_addr[0]:
                 res = self._send_request("PUT", f"/users/reconnect/{current_addr}/{username}")
                 publish_status(res.json())
         except Exception as e:
