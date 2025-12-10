@@ -42,7 +42,6 @@ class ManagerService():
     def __new__(cls, dispatcher: Dispatcher):
         if cls._instance is None:
             cls._instance = super(ManagerService, cls).__new__(cls)
-            cls._instance._k = int(os.getenv("K", "2")) # parametrizable
             cls._instance._lock = Lock()
             cls._instance._peer_locks = {}
             cls._instance._dispatcher = dispatcher
@@ -571,6 +570,7 @@ class ManagerService():
 
         self._managers_ips = managers
         self._managers_ips.remove(get_local_ip())
+        self._k = len(self._managers_ips) // 2
     
     def _find_network_leader(self) -> str:
         if self._leader_ip:
