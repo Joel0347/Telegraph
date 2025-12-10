@@ -1,7 +1,7 @@
 import streamlit as st
 import threading, os
 from server import start_flask_server
-from background_tasks import background_tasks
+from background_tasks import background_tasks, leader_search_bg
 from services.api_handler_service import ApiHandlerService
 from services.client_info_service import ClientInfoService
 from components.auth import AuthModule
@@ -30,11 +30,22 @@ if "flask_started" not in st.session_state:
 # Lógica de navegación
 if "page" not in st.session_state:
     st.session_state.page = "login"
-
+        
 client_srv = ClientInfoService()
 api_srv = ApiHandlerService()
 auth_module = AuthModule(api_srv, client_srv)
 chat_module = ChatModule(api_srv, client_srv)
+
+if "leader_search" not in st.session_state:
+    leader_search = BackgroundScheduler()
+    leader_search.add_job(
+        func=leader_search_bg, trigger="interval", seconds=5, 
+        kwargs={
+            "api_srv": api_srv
+        }
+    )
+    leader_search.start()
+    st.session_state.leader_search = leader_search
 
 if username := client_srv.get_username():
     if not api_srv.check_is_active(username):
