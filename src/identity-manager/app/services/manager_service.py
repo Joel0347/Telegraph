@@ -195,7 +195,7 @@ class ManagerService():
         self._status = NodeState.LEADER
         self._leader_ip = get_local_ip()
         self._send_request_to_all_managers("POST", f"/new_leader/{self._leader_ip}")
-        self._send_request_to_all_clients("POST", f"/new_leader/{self._leader_ip}")
+        # self._send_request_to_all_clients("POST", f"/new_leader/{self._leader_ip}")
         # logica para expandir la noticia de mi liderazgo a los clientes
         
         # Inicializar estado del líder
@@ -385,13 +385,13 @@ class ManagerService():
         """Maneja solicitudes de clientes para añadir datos al log"""
         if not self.I_am_leader():
             # Redirigir al líder si este nodo no es el líder
-            leader = self._find_network_leader()
-            if leader:
-                self.logger.info(f"Redirecting client to leader: {leader}")
-                return {"success": False, "leader": leader}
+            # leader = self._find_network_leader()
+            if self._leader_ip:
+                self.logger.info(f"Redirecting client to leader: {self._leader_ip}")
+                return {"success": False, "leader": self._leader_ip}
             else:
                 self.logger.warning("No leader available for client request")
-                return {"succes": False, "message": "no_leader_available"}
+                return {"succes": False, "message": "No leader available"}
         
         try:
             with self._lock:
@@ -620,18 +620,18 @@ class ManagerService():
                 continue
         return res
     
-    def _send_request_to_all_clients(self, method: str, path: str, **kwargs):
-        users = self._dispatcher.auth_service.list_all()
-        for user in users:
-            try:
-                res = requests.request(
-                    method, f"http://{user.ip}:{user.port}{path}",
-                    timeout=2, **kwargs
-                )
-                res.raise_for_status()
-            except Exception as e:
-                publish_status({'message': f"Error con {user}: {str(e)}", 'status': 500})
-                continue
+    # def _send_request_to_all_clients(self, method: str, path: str, **kwargs):
+    #     users = self._dispatcher.auth_service.list_all()
+    #     for user in users:
+    #         try:
+    #             res = requests.request(
+    #                 method, f"http://{user.ip}:{user.port}{path}",
+    #                 timeout=2, **kwargs
+    #             )
+    #             res.raise_for_status()
+    #         except Exception as e:
+    #             publish_status({'message': f"Error con {user}: {str(e)}", 'status': 500})
+    #             continue
         
     def add_new_manager(self, ip: str):
         try:
@@ -656,7 +656,8 @@ class ManagerService():
         
     def update_leader(self, new_leader_addr: str):
         try:
-            self._leader_ip = new_leader_addr
+            if (not self._leader_ip) or (self._leader_ip != new_leader_addr):
+                self._leader_ip = new_leader_addr
             return {"message": "Leader updated succesfully", "status": 200}
         except Exception as e:
             return {"message": f"Error updating leader: {e}", "status": 500}

@@ -45,10 +45,23 @@ class ApiHandlerService():
     
     def _find_leader_addr(self):
         try:
-            res = self._send_request_to_all("GET", "/managers/leader")
-            if res.json()["status"] == 200:
-                self.manager_leader_addr = res.json()["message"]
-            else:
+            leaders = {}
+            api_port = int(os.getenv("API_PORT", "8000"))
+            for manager in self.api_urls:
+                res = requests.get(
+                    f"http://{manager}:{api_port}/managers/leader",
+                    timeout=10
+                )  
+                
+                if res.json()["status"] == 200:
+                    leader = res.json()["message"]
+                    if leader not in leaders:
+                        leaders[leader] = 0
+                    leaders[leader] += 1
+                    
+            self.manager_leader_addr = max(leaders, key=leaders.get)
+            
+            if not leaders:
                 publish_status(res.json())
         except Exception as e:
             publish_status({'message': f"Error inesperado {e}", 'status': 500})
@@ -61,15 +74,27 @@ class ApiHandlerService():
         api_port = int(os.getenv("API_PORT", "8000"))
         
         try:
-            if not self.manager_leader_addr:
+            try:
+                if not self.manager_leader_addr:
+                    self._find_leader_addr()
+                    
+                res = requests.request(
+                    method, f"http://{self.manager_leader_addr}:{api_port}{path}",
+                    timeout=15, **kwargs
+                )
+            except requests.Timeout:
+                current_leader = self.manager_leader_addr
                 self._find_leader_addr()
                 
-            res = requests.request(
-                method, f"http://{self.manager_leader_addr}:{api_port}{path}",
-                timeout=15, **kwargs
-            )
+                if current_leader != self.manager_leader_addr:
+                    res = requests.request(
+                        method, f"http://{self.manager_leader_addr}:{api_port}{path}",
+                        timeout=15, **kwargs
+                    )
+                else:
+                    raise
         except Exception as e:
-            ## comentar esta linea para no mostrar los managers caidos
+            # comentar esta linea para no mostrar los managers caidos
             publish_status({'message': f"Error con {self.manager_leader_addr}: {e}", 'status': 500})
         
         return res
@@ -103,7 +128,8 @@ class ApiHandlerService():
         return res
 
     def update_leader_addr(self, new_leader_addr: str):
-        self.manager_leader_addr = new_leader_addr
+        if not self.manager_leader_addr or self.manager_leader_addr != new_leader_addr:
+            self.manager_leader_addr = new_leader_addr
         
     def get_peer_address(self, username: str) -> Optional[tuple]:
         try:
