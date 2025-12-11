@@ -23,6 +23,13 @@ class ChatModule(UIModule):
         user_chats = self.msg_srv.load_conversations(username)
         self.api_srv.send_heart_beat(username)
         online_users = self.api_srv.get_online_users(username)
+        
+        if self.api_srv.get_duplicated_session():
+            st.warning("""
+                Se ha detectado sesión duplicada. Por seguridad, por favor,
+                inicie sesión nuevamente.
+            """)
+            self.api_srv.set_duplicated_session(False)
 
         if st.sidebar.button("Cerrar Sesión", type='primary'):
             self.api_srv.logout(username)

@@ -42,3 +42,7 @@ class StateRepository:
         with self._lock:
             raw = state.model_dump(mode="json")
             self._write_all(raw)
+            
+    def reset(self):
+        with self._lock:
+            self._write_all([])

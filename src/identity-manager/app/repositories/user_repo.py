@@ -68,3 +68,7 @@ class UserRepository:
                     self._write_all(raw)
                     return
             raise ValueError("Usuario no existe")
+        
+    def reset(self):
+        with self._lock:
+            self._write_all([])
