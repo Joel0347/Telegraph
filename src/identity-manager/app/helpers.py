@@ -1,9 +1,7 @@
-import socket, fcntl, struct, ipaddress, logging, threading
+import socket, fcntl, struct, ipaddress, logging
 from bcrypt import checkpw, hashpw, gensalt
 
 logging.basicConfig(level=logging.INFO)
-lock = threading.Lock()
-blocked = False
 
 def get_local_ip(s: socket.socket = None, ifname="eth0") -> str:
     # obtiene la IP overlay del contenedor

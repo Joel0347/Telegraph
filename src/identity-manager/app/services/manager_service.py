@@ -2,7 +2,7 @@ import requests, os, json, socket, random, time, threading, logging
 from threading import Lock
 from enum import Enum
 from typing import Dict, Any
-from helpers import publish_status, get_local_ip, get_overlay_network, lock, blocked
+from helpers import publish_status, get_local_ip, get_overlay_network
 from services.log_service import LogService, LogRepository
 from services.state_service import StateRepository, StateService
 from dispatcher import Dispatcher
@@ -122,8 +122,9 @@ class ManagerService():
         
     def update_term_and_vote(self, term: int, voted_for: str = None):
         """Actualiza el término y voto de manera persistente"""
-        self._current_term = term
-        self._voted_for = voted_for
+        with self._lock:
+            self._current_term = term
+            self._voted_for = voted_for
         self._save_persistent_state()
         self.logger.info(f"Updated term to {term}, voted_for: {voted_for}")
     
@@ -606,14 +607,12 @@ class ManagerService():
             
     def _merge_logs(self, leaders: list[str], managers: list[str]):
         api_port = 8000
-        global blocked
 
         # ------------block-------------
         for peer in managers:
             requests.post(f"http://{peer}:{api_port}/block")
         
-        with lock:
-            blocked = not blocked
+        requests.post(f"http://{get_local_ip()}:{api_port}/block")
         # ------------------------------
                 
         local_data: list[dict] = self._dispatcher \
@@ -641,8 +640,7 @@ class ManagerService():
         for peer in managers:
             requests.post(f"http://{peer}:{api_port}/block")
             
-        with lock:
-            blocked = not blocked
+        requests.post(f"http://{get_local_ip()}:{api_port}/block")
         # -----------------------------------------------
     
     def _update_log(self, user_data: dict):
@@ -655,7 +653,11 @@ class ManagerService():
         }
 
         self._save_log_entry(new_entry)
-        self._dispatcher.register(user_data)
+        self._dispatcher.auth_service.register_user(
+            user_data["username"], user_data["password"],
+            user_data["ip"], user_data["port"],
+            user_data["status"], hashed=True
+        )
         
     def _apply_merge_criteria(self, local_user: dict, remote_user: dict):
         if remote_user["status"] == "offline":
@@ -671,7 +673,7 @@ class ManagerService():
             }
             
             self._save_log_entry(new_entry)
-            self._dispatcher.update_user(remote_user)
+            self._dispatcher.auth_service.update(remote_user)
         
         else:
             data = {"username": local_user["username"]}
@@ -684,7 +686,7 @@ class ManagerService():
             }
             
             self._save_log_entry(new_entry)
-            self._dispatcher.update_status(data)
+            self._dispatcher.auth_service.update_status(data["username"], "offline")
 
             remote_ip = remote_user["ip"]
             remote_port = remote_user["port"]
@@ -788,6 +790,9 @@ class ManagerService():
         try:
             if (not self._leader_ip) or (self._leader_ip != new_leader_addr):
                 self._leader_ip = new_leader_addr
+
+                if self._leader_ip != get_local_ip():
+                    self._status = NodeState.FOLLOWER
                 self.reset_election_timer()
             return {"message": "Leader updated succesfully", "status": 200}
         except Exception as e:

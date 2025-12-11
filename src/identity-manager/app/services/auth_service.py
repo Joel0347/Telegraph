@@ -21,8 +21,9 @@ class AuthService:
 
 
     def register_user(
-            self, username: str, password: str,
-            ip: str, port: int, status="online"
+        self, username: str, password: str,
+        ip: str, port: int, status="online",
+        hashed=False
     ) -> ApiResponse:
         try:
             if not username or not password:
@@ -33,10 +34,10 @@ class AuthService:
                 return ApiResponse(
                     f"Usuario {username} ya se encuentra registrado", 409
                 )
-
+            pwd = password if hashed else hash_password(password)
             user = User(
                 username=username, ip=ip, port=port, status=status,
-                password=hash_password(password),
+                password=pwd,
                 last_seen=datetime.now()
             )
 
