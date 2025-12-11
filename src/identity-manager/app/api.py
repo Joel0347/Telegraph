@@ -8,6 +8,7 @@ from requests.exceptions import RequestException, ConnectionError
 import requests, threading
 from udp_discovery import run_server
 from dispatcher import Dispatcher
+from helpers import lock, blocked
 
 
 app = Flask(__name__)
@@ -15,9 +16,6 @@ user_repo = UserRepository()
 auth_service = AuthService(user_repo)
 dispatcher = Dispatcher(auth_service)
 mng_service = ManagerService(dispatcher)
-
-lock = threading.Lock()
-blocked = False
 
 # --- Interceptor ---
 @app.before_request
@@ -198,7 +196,7 @@ def check_inactive_users():
     
     try:
         now = datetime.now()
-        timeout = timedelta(seconds=30)  # tolerancia 30 seg
+        timeout = timedelta(seconds=60)  # tolerancia 60 seg
         users = auth_service.list_all()
         for u in users:
             if u.last_seen and (now - u.last_seen) > timeout and u.status != "offline":

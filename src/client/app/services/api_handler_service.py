@@ -197,11 +197,9 @@ class ApiHandlerService():
             if res.json()["status"] == 200:
                 return res.json()["message"] == "online"
             return False
-        except requests.Timeout:
-            return True
         except Exception as e:
             publish_status({'message': f"Error inesperado {e}", 'status': 500})
-            return False
+            return True
         
     def send_heart_beat(self, username: str):
         res = self._send_request("POST", "/heartbeat", json={"username": username})
