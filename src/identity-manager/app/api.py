@@ -8,7 +8,6 @@ from requests.exceptions import RequestException, ConnectionError
 import requests, threading
 from udp_discovery import run_server
 from dispatcher import Dispatcher
-from helpers import lock, blocked
 
 
 app = Flask(__name__)
@@ -16,6 +15,9 @@ user_repo = UserRepository()
 auth_service = AuthService(user_repo)
 dispatcher = Dispatcher(auth_service)
 mng_service = ManagerService(dispatcher)
+
+lock = threading.Lock()
+blocked = False
 
 # --- Interceptor ---
 @app.before_request
@@ -180,6 +182,10 @@ def block_api():
     global blocked
     
     with lock:
+        if not blocked and mng_service._election_timer:
+            mng_service._election_timer.cancel()
+        elif blocked:
+            mng_service.reset_election_timer()
         blocked = not blocked
     
     return jsonify({"message": f"Status: {blocked}", "status": 200})
