@@ -73,3 +73,6 @@ class LogService:
             return {"message": log.model_dump(mode="json"), "status": 200}
         except Exception as e:
             return {"message": str(e), "status": 500}
+        
+    def reset(self):
+        self.repo.reset()

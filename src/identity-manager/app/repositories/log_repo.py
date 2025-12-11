@@ -83,3 +83,7 @@ class LogRepository:
                     self._write_all(raw)
                     return
             raise ValueError("Log no existe")
+
+    def reset(self):
+        with self._lock:
+            self._write_all([])

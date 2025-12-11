@@ -235,3 +235,9 @@ class ApiHandlerService():
                 publish_status(res.json())
         except Exception as e:
             publish_status({'message': f"Error inesperado: {e}", 'status': 500})
+            
+    def set_duplicated_session(self, value: bool):
+        self.duplicated_session = value
+    
+    def get_duplicated_session(self) -> bool:
+        return getattr(self, 'duplicated_session', False)

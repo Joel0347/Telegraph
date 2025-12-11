@@ -59,6 +59,11 @@ def new_leader(leader_addr: str):
         return jsonify({"status": "ok"}), 200
     except:
         return jsonify({"status": "error"}), 500
+    
+@app.post("/duplicated-session")
+def duplicated_session():
+    api_srv.set_duplicated_session(True)
+    return jsonify({"status": "ok"}), 200
 
 def start_flask_server():
     port = int(os.getenv("API_PORT", "8000"))

@@ -16,10 +16,23 @@ auth_service = AuthService(user_repo)
 dispatcher = Dispatcher(auth_service)
 mng_service = ManagerService(dispatcher)
 
+lock = threading.Lock()
+blocked = False
 
 # --- Interceptor ---
 @app.before_request
 def intercept_requests():
+    global blocked
+    
+    allowed_when_blocked = ["list_users_info", "block", "reset"]
+    
+    if request.endpoint in allowed_when_blocked:
+        return None
+    
+    with lock:
+        if blocked:
+            return jsonify({"message": f"Reconectando ...", "status": 404})
+
     # Endpoints de clientes (los que definiste en la sección CLIENT ENDPOINTS)
     client_endpoints = {
         "register",
@@ -159,6 +172,25 @@ def find_leader():
 def new_leader(ip: str):
     msg = mng_service.update_leader(ip)
     return jsonify(msg)
+
+@app.route("/users/info", methods=["GET"])
+def list_users_info():
+    msg = dispatcher.list_all_users_data()
+    return jsonify(msg)
+
+@app.post("/block")
+def block_api():
+    global blocked
+    
+    with lock:
+        blocked = not blocked
+    
+    return jsonify({"message": f"Status: {blocked}", "status": 200})
+
+@app.post("/reset")
+def reset():
+    mng_service.reset()
+    return jsonify({"message": "Reiniciado exitosamente", "status": 200})
         
 # --- Job en background ---
 def check_inactive_users():

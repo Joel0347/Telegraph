@@ -21,7 +21,8 @@ class Dispatcher:
                 "heartbeat": cls._instance.heartbeat,
                 "is_user_active": cls._instance.is_user_active,
                 "update_ip_address": cls._instance.update_ip_address,
-                "update_status": cls._instance.update_status
+                "update_status": cls._instance.update_status,
+                "update_user": cls._instance.update_user
             }
             cls._instance.auth_service = auth_service
         return cls._instance
@@ -42,6 +43,7 @@ class Dispatcher:
             password=data.get("password", ""),
             ip=data.get("ip", ""),
             port=data.get("port", 0),
+            status=data.get("status", "online")
         )
         return jsonify(msg)
     
@@ -67,6 +69,10 @@ class Dispatcher:
 
     def list_users(self) -> Response:
         msg = self.auth_service.list_usernames()
+        return jsonify(msg)
+    
+    def list_all_users_data(self) -> Response:
+        msg = self.auth_service.list_all_users_data()
         return jsonify(msg)
 
     def find_by_username(self, data: dict) -> Response:
@@ -109,4 +115,8 @@ class Dispatcher:
     def update_status(self, data: dict) -> Response:
         username = data.get("username")
         msg = self.auth_service.update_status(username, "offline")
+        return jsonify(msg)
+    
+    def update_user(self, data: dict) -> Response:
+        msg = self.auth_service.update(data)
         return jsonify(msg)

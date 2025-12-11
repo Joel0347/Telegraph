@@ -194,8 +194,6 @@ class ManagerService():
         self._status = NodeState.LEADER
         self._leader_ip = get_local_ip()
         self._send_request_to_all_managers("POST", f"/new_leader/{self._leader_ip}")
-        # self._send_request_to_all_clients("POST", f"/new_leader/{self._leader_ip}")
-        # logica para expandir la noticia de mi liderazgo a los clientes
         
         # Inicializar estado del líder
         for peer in list(self._managers_ips):
@@ -384,7 +382,6 @@ class ManagerService():
         """Maneja solicitudes de clientes para añadir datos al log"""
         if not self.I_am_leader():
             # Redirigir al líder si este nodo no es el líder
-            # leader = self._find_network_leader()
             if self._leader_ip:
                 self.logger.info(f"Redirecting client to leader: {self._leader_ip}")
                 return {"success": False, "leader": self._leader_ip}
@@ -571,6 +568,125 @@ class ManagerService():
         self._managers_ips = managers
         self._managers_ips.remove(get_local_ip())
         self._k = len(self._managers_ips) // 2
+        self._check_for_network_reconnection()
+    
+    def _check_for_network_reconnection(self):
+        if not self.I_am_leader():
+            return
+        
+        api_port = 8000
+        possible_leaders = []
+        
+        for manager in self._managers_ips:
+            res = requests.get(
+                url=f"http://{manager}:{api_port}/status", 
+                timeout=5
+            )
+            
+            status = res.json()
+            state = status["state"]
+            current_term = status["current_term"]
+            
+            if state == NodeState.LEADER.value and \
+                self._current_term < current_term:
+                
+                possible_leaders = []
+                break
+            elif state == NodeState.LEADER.value:
+                possible_leaders.append(manager)
+        
+        if possible_leaders:
+            self._merge_logs(possible_leaders)
+            
+    def _merge_logs(self, peers: list[str]):
+        api_port = 8000
+        # ------------block-------------
+        for peer in list(self._managers_ips):
+            requests.post(f"http://{peer}:{api_port}/block")
+        
+        requests.post(f"http://{get_local_ip()}:{api_port}/block")
+        # ------------------------------
+                
+        local_data: list[dict] = self._dispatcher \
+            .auth_service.list_all_users_data()["message"]
+        
+        for peer in peers:
+            res_other = requests.get(
+                url=f"http://{peer}:{api_port}/users/info", 
+                timeout=5
+            )
+            
+            missing_data: list[dict] = res_other.json()["message"]
+            
+            for user in missing_data:
+                if any(u["username"] == user["username"] for u in local_data):
+                    local_user = next(u for u in local_data if u["username"] == user["username"])
+                    self._apply_merge_criteria(local_user, user)
+                else:
+                    self._update_log(user)
+                    
+        # --------------- unblock ----------------------
+        for peer in list(self._managers_ips):
+            requests.post(f"http://{peer}:{api_port}/reset")
+            
+        for peer in list(self._managers_ips):
+            requests.post(f"http://{peer}:{api_port}/block")
+            
+        requests.post(f"http://{get_local_ip()}:{api_port}/block")
+        # -----------------------------------------------
+    
+    def _update_log(self, user_data: dict):
+        new_entry = {
+            "term": self._current_term,
+            "index": len(self._log),
+            "op": "register",
+            "args": user_data,
+            "applied": False
+        }
+
+        self._save_log_entry(new_entry)
+        
+    def _apply_merge_criteria(self, local_user: dict, remote_user: dict):
+        if remote_user["status"] == "offline":
+            return
+        
+        elif local_user["status"] == "offline":
+            new_entry = {
+                "term": self._current_term,
+                "index": len(self._log),
+                "op": "update_user",
+                "args": remote_user,
+                "applied": False
+            }
+            
+            self._save_log_entry(new_entry)
+        
+        else:
+            new_entry = {
+                "term": self._current_term,
+                "index": len(self._log),
+                "op": "update_status",
+                "args": {"username": local_user["username"]},
+                "applied": False
+            }
+            
+            self._save_log_entry(new_entry)
+            
+            remote_ip = remote_user["ip"]
+            remote_port = remote_user["port"]
+            local_user_ip = local_user["ip"]
+            local_user_port = local_user["port"]
+
+            requests.post(
+                f"http://{remote_ip}:{remote_port}/duplicated-session",
+                timeout=2
+            )
+            
+            requests.post(
+                f"http://{local_user_ip}:{local_user_port}/duplicated-session",
+                timeout=2
+            )
+            
     
     def _find_network_leader(self) -> str:
         if self._leader_ip:
@@ -661,3 +777,13 @@ class ManagerService():
             return {"message": "Leader updated succesfully", "status": 200}
         except Exception as e:
             return {"message": f"Error updating leader: {e}", "status": 500}
+        
+    def reset(self):
+        self._state_service.reset()
+        self._log_service.reset()
+        self._dispatcher.auth_service.reset()
+        self._load_persistent_state()
+        self._status = NodeState.FOLLOWER
+        self._match_index = {}
+        self._next_index = {}
+        self._leader_ip = None

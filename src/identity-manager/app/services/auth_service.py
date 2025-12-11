@@ -22,7 +22,7 @@ class AuthService:
 
     def register_user(
             self, username: str, password: str,
-            ip: str, port: int
+            ip: str, port: int, status="online"
     ) -> ApiResponse:
         try:
             if not username or not password:
@@ -35,7 +35,7 @@ class AuthService:
                 )
 
             user = User(
-                username=username, ip=ip, port=port, status="online",
+                username=username, ip=ip, port=port, status=status,
                 password=hash_password(password),
                 last_seen=datetime.now()
             )
@@ -93,6 +93,27 @@ class AuthService:
         except Exception as e:
             return ApiResponse(str(e), 500)
         
+    def update(self, payload: dict) -> ApiResponse:
+        try:
+            username = payload.get("username", "")
+            password = payload.get("password", "")
+            ip = payload.get("ip", "")
+            port = payload.get("port", 0)
+            status = payload.get("status", "online")
+
+            user = self.repo.find_by_username(username)
+            if not user:
+                return ApiResponse("El usuario no existe", 500)
+            
+            user.ip = ip
+            user.password = password
+            user.port = port
+            user.status = status
+            self.repo.update_user(user)
+            return ApiResponse('Usuario actualizado exitosamente', 200)
+        except Exception as e:
+            return ApiResponse(str(e), 500)
+        
     def update_last_seen(self, username: str) -> ApiResponse:
         try:
             user = self.repo.find_by_username(username)
@@ -120,9 +141,17 @@ class AuthService:
     def list_all(self) -> list[User]:
         return self.repo.list_all()
     
+    def list_all_users_data(self) -> ApiResponse:
+        users = self.repo.list_all()
+        users_data = [u.model_dump(mode="json") for u in users]
+        return ApiResponse(users_data, 200)
+    
     def get_user_by_username(self, username: str) -> ApiResponse:
         try:
             user = self.repo.find_by_username(username)
             return ApiResponse(user.model_dump(mode="json"), 200)
         except Exception as e:
             return ApiResponse(str(e), 500)
+        
+    def reset(self):
+        self.repo.reset()
