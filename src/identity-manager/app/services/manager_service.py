@@ -290,7 +290,7 @@ class ManagerService():
         if term > self._current_term:
             self.update_term_and_vote(term)
             self._status = NodeState.FOLLOWER
-            self._voted_for = None
+            self.reset_election_timer()
         
         # Verificar condiciones para votar
         can_vote = (
@@ -346,7 +346,6 @@ class ManagerService():
         if term > self._current_term:
             self.update_term_and_vote(term)
             self._status = NodeState.FOLLOWER
-            self._voted_for = None
         
         # Verificar consistencia del log
         if prev_log_index >= 0:
@@ -577,23 +576,26 @@ class ManagerService():
         api_port = 8000
         possible_leaders = []
         
-        for manager in self._managers_ips:
-            res = requests.get(
-                url=f"http://{manager}:{api_port}/status", 
-                timeout=5
-            )
-            
-            status = res.json()
-            state = status["state"]
-            current_term = status["current_term"]
-            
-            if state == NodeState.LEADER.value and \
-                self._current_term < current_term:
+        for manager in list(self._managers_ips):
+            try:
+                res = requests.get(
+                    url=f"http://{manager}:{api_port}/status", 
+                    timeout=2
+                )
                 
-                possible_leaders = []
-                break
-            elif state == NodeState.LEADER.value:
-                possible_leaders.append(manager)
+                status = res.json()
+                state = status["state"]
+                current_term = status["current_term"]
+                
+                if state == NodeState.LEADER.value and \
+                    self._current_term < current_term:
+                    
+                    possible_leaders = []
+                    break
+                elif state == NodeState.LEADER.value:
+                    possible_leaders.append(manager)
+            except:
+                continue
         
         if possible_leaders:
             self._merge_logs(possible_leaders)
@@ -645,6 +647,7 @@ class ManagerService():
         }
 
         self._save_log_entry(new_entry)
+        self._dispatcher.register(user_data)
         
     def _apply_merge_criteria(self, local_user: dict, remote_user: dict):
         if remote_user["status"] == "offline":
@@ -660,18 +663,21 @@ class ManagerService():
             }
             
             self._save_log_entry(new_entry)
+            self._dispatcher.update_user(remote_user)
         
         else:
+            data = {"username": local_user["username"]}
             new_entry = {
                 "term": self._current_term,
                 "index": len(self._log),
                 "op": "update_status",
-                "args": {"username": local_user["username"]},
+                "args": data,
                 "applied": False
             }
             
             self._save_log_entry(new_entry)
-            
+            self._dispatcher.update_status(data)
+
             remote_ip = remote_user["ip"]
             remote_port = remote_user["port"]
             local_user_ip = local_user["ip"]

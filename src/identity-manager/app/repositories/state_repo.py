@@ -45,4 +45,4 @@ class StateRepository:
             
     def reset(self):
         with self._lock:
-            self._write_all([])
+            self._write_all(State().model_dump())

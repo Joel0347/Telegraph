@@ -24,7 +24,7 @@ blocked = False
 def intercept_requests():
     global blocked
     
-    allowed_when_blocked = ["list_users_info", "block", "reset"]
+    allowed_when_blocked = ["list_users_info", "block_api", "reset", "status"]
     
     if request.endpoint in allowed_when_blocked:
         return None
@@ -175,8 +175,7 @@ def new_leader(ip: str):
 
 @app.route("/users/info", methods=["GET"])
 def list_users_info():
-    msg = dispatcher.list_all_users_data()
-    return jsonify(msg)
+    return dispatcher.list_all_users_data()
 
 @app.post("/block")
 def block_api():

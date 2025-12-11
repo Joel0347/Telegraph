@@ -135,7 +135,6 @@ docker run --rm \
   -v $(pwd)/volumes/identity-data-<i>:/data \
   -p <port_on_host>:8000 \
   -e UDP_PORT=5353 \
-  -e K=2 \
   src-identity-manager:latest
 ```
 
