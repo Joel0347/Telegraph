@@ -2,7 +2,7 @@ import requests, os, json, socket, random, time, threading, logging
 from threading import Lock
 from enum import Enum
 from typing import Dict, Any
-from helpers import publish_status, get_local_ip, get_overlay_network
+from helpers import publish_status, get_local_ip, get_overlay_network, lock, blocked
 from services.log_service import LogService, LogRepository
 from services.state_service import StateRepository, StateService
 from dispatcher import Dispatcher
@@ -202,7 +202,7 @@ class ManagerService():
         
         self._maybe_advance_commit_index()
         # Iniciar loop de heartbeats
-        self.start_heartbeat_loop(interval=1.0)
+        self.start_heartbeat_loop()
     
     def start_heartbeat_loop(self, interval: float = 3.0):
         """Loop dedicado para enviar heartbeats sin encadenar timers"""
@@ -273,6 +273,10 @@ class ManagerService():
 
     def handle_request_vote(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Maneja solicitudes de voto"""
+
+        if self.I_am_leader():
+            return {"term": self._current_term, "vote_granted": False}
+        
         term = data["term"]
         candidate_id = data["candidate_id"]
         last_log_index = data["last_log_index"]
@@ -563,20 +567,20 @@ class ManagerService():
                         managers.add(str(ip))
                 except Exception:
                     continue
-
+        
+        managers.remove(get_local_ip())
+        self._check_for_network_reconnection(managers)
         self._managers_ips = managers
-        self._managers_ips.remove(get_local_ip())
         self._k = len(self._managers_ips) // 2
-        self._check_for_network_reconnection()
     
-    def _check_for_network_reconnection(self):
+    def _check_for_network_reconnection(self, managers: list[str]):
         if not self.I_am_leader():
             return
         
         api_port = 8000
         possible_leaders = []
         
-        for manager in list(self._managers_ips):
+        for manager in managers:
             try:
                 res = requests.get(
                     url=f"http://{manager}:{api_port}/status", 
@@ -598,43 +602,47 @@ class ManagerService():
                 continue
         
         if possible_leaders:
-            self._merge_logs(possible_leaders)
+            self._merge_logs(possible_leaders, managers)
             
-    def _merge_logs(self, peers: list[str]):
+    def _merge_logs(self, leaders: list[str], managers: list[str]):
         api_port = 8000
+        global blocked
+
         # ------------block-------------
-        for peer in list(self._managers_ips):
+        for peer in managers:
             requests.post(f"http://{peer}:{api_port}/block")
         
-        requests.post(f"http://{get_local_ip()}:{api_port}/block")
+        with lock:
+            blocked = not blocked
         # ------------------------------
                 
         local_data: list[dict] = self._dispatcher \
             .auth_service.list_all_users_data()["message"]
         
-        for peer in peers:
+        for peer in leaders:
             res_other = requests.get(
                 url=f"http://{peer}:{api_port}/users/info", 
                 timeout=5
             )
             
             missing_data: list[dict] = res_other.json()["message"]
-            
             for user in missing_data:
-                if any(u["username"] == user["username"] for u in local_data):
-                    local_user = next(u for u in local_data if u["username"] == user["username"])
+                if local_user := next(
+                    (u for u in local_data if u["username"] == user["username"]
+                ), None):
                     self._apply_merge_criteria(local_user, user)
                 else:
                     self._update_log(user)
                     
         # --------------- unblock ----------------------
-        for peer in list(self._managers_ips):
+        for peer in managers:
             requests.post(f"http://{peer}:{api_port}/reset")
             
-        for peer in list(self._managers_ips):
+        for peer in managers:
             requests.post(f"http://{peer}:{api_port}/block")
             
-        requests.post(f"http://{get_local_ip()}:{api_port}/block")
+        with lock:
+            blocked = not blocked
         # -----------------------------------------------
     
     def _update_log(self, user_data: dict):
@@ -780,6 +788,7 @@ class ManagerService():
         try:
             if (not self._leader_ip) or (self._leader_ip != new_leader_addr):
                 self._leader_ip = new_leader_addr
+                self.reset_election_timer()
             return {"message": "Leader updated succesfully", "status": 200}
         except Exception as e:
             return {"message": f"Error updating leader: {e}", "status": 500}
