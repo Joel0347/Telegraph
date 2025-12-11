@@ -50,7 +50,7 @@ class ApiHandlerService():
             for manager in self.api_urls:
                 res = requests.get(
                     f"http://{manager}:{api_port}/managers/leader",
-                    timeout=10
+                    timeout=15
                 )  
                 
                 if res.json()["status"] == 200:
@@ -80,7 +80,7 @@ class ApiHandlerService():
                     
                 res = requests.request(
                     method, f"http://{self.manager_leader_addr}:{api_port}{path}",
-                    timeout=15, **kwargs
+                    timeout=20, **kwargs
                 )
             except requests.Timeout:
                 current_leader = self.manager_leader_addr
@@ -197,6 +197,8 @@ class ApiHandlerService():
             if res.json()["status"] == 200:
                 return res.json()["message"] == "online"
             return False
+        except requests.Timeout:
+            return True
         except Exception as e:
             publish_status({'message': f"Error inesperado {e}", 'status': 500})
             return False
