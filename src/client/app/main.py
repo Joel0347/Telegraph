@@ -50,7 +50,7 @@ if "leader_search" not in st.session_state:
 if username := client_srv.get_username():
     if not api_srv.check_is_active(username):
         if "bg_tasks" in st.session_state:
-            st.session_state.bg_tasks.shutdown(wait=False)
+            st.session_state.bg_tasks.shutdown(wait=True)
             del st.session_state.bg_tasks
         client_srv.remove_username()
         st.rerun()
@@ -66,7 +66,7 @@ elif st.session_state.page == "chat" and not username:
     st.session_state.page = "login"
     st.rerun()
 elif st.session_state.page == "chat":
-    if "bg_tasks" not in st.session_state:
+    if "bg_tasks" not in st.session_state or st.session_state.bg_tasks.running == False:
         scheduler = BackgroundScheduler()
         scheduler.add_job(
             func=background_tasks, trigger="interval", seconds=5, 

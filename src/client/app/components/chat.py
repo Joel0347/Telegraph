@@ -35,8 +35,9 @@ class ChatModule(UIModule):
             self.api_srv.logout(username)
             st.session_state.page = "login"
             st.session_state.msg_draft = ""
-            st.session_state.bg_tasks.shutdown(wait=False)
-            del st.session_state.bg_tasks
+            if "bg_tasks" in st.session_state:
+                st.session_state.bg_tasks.shutdown(wait=True)
+                del st.session_state.bg_tasks
             self.client_srv.remove_username()
             st.rerun()
 

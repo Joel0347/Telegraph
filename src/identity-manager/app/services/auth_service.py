@@ -149,8 +149,10 @@ class AuthService:
     
     def get_user_by_username(self, username: str) -> ApiResponse:
         try:
-            user = self.repo.find_by_username(username)
-            return ApiResponse(user.model_dump(mode="json"), 200)
+            if user := self.repo.find_by_username(username):
+                return ApiResponse(user.model_dump(mode="json"), 200)
+            else:
+                return ApiResponse("Usuario no existe", 500)
         except Exception as e:
             return ApiResponse(str(e), 500)
         
