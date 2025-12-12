@@ -43,7 +43,8 @@ class Dispatcher:
             password=data.get("password", ""),
             ip=data.get("ip", ""),
             port=data.get("port", 0),
-            status=data.get("status", "online")
+            status=data.get("status", "online"),
+            hashed=data.get("hashed", False)
         )
         return jsonify(msg)
     

@@ -391,7 +391,7 @@ class ManagerService():
                 return {"success": False, "leader": self._leader_ip}
             else:
                 self.logger.warning("No leader available for client request")
-                return {"succes": False, "message": "No leader available"}
+                return {"success": False, "message": "No leader available"}
         
         try:
             with self._lock:
@@ -644,6 +644,7 @@ class ManagerService():
         # -----------------------------------------------
     
     def _update_log(self, user_data: dict):
+        user_data["hashed"] = True
         new_entry = {
             "term": self._current_term,
             "index": len(self._log),
