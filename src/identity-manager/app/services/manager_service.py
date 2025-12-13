@@ -809,3 +809,5 @@ class ManagerService():
         self._dispatcher.auth_service.reset()
         self._load_persistent_state()
         self._status = NodeState.FOLLOWER
+        self._next_index = {}
+        self._match_index = {}
