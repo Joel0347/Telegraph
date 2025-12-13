@@ -49,7 +49,7 @@ if "leader_search" not in st.session_state:
 
 if username := client_srv.get_username():
     if not api_srv.check_is_active(username):
-        if "bg_tasks" in st.session_state:
+        if "bg_tasks" in st.session_state and st.session_state.bg_tasks.running == True:
             st.session_state.bg_tasks.shutdown(wait=True)
             del st.session_state.bg_tasks
         client_srv.remove_username()

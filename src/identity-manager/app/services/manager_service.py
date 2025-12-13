@@ -47,6 +47,7 @@ class ManagerService():
             cls._instance._dispatcher = dispatcher
             cls._instance._node_id = get_local_ip()
             cls._instance._port = 8000
+            cls._instance._setup_logging()
             cls._instance._discover_managers()
             cls._instance._status = NodeState.FOLLOWER
             cls._instance._log_service = LogService(LogRepository())
@@ -54,9 +55,7 @@ class ManagerService():
             cls._instance._load_persistent_state()
             cls._instance._find_network_leader()
             cls._instance._notify_existence()
-            # ========== Codigo de Raft =========
-            cls._instance._setup_logging()
-            
+                        
             # Leader state
             cls._instance._next_index = {}
             cls._instance._match_index = {}
@@ -111,13 +110,13 @@ class ManagerService():
         }
         
         self._state_service.update(payload)
-        self.logger.debug("Persistent state saved successfully")
+        self.logger.info("Persistent state saved successfully")
 
     def _save_log_entry(self, entry: Dict[str, Any]):
         res = self._log_service.add_log(entry)
         
         if res["status"] == 200:
-            self.logger.debug(f"Log entry saved: index={entry.get('index')}")
+            self.logger.info(f"Log entry saved: index={entry.get('index')}")
             self._log.append(entry)
         else:
             self.logger.error(f"Error saving log entry: {res['message']}")
@@ -144,7 +143,7 @@ class ManagerService():
         self._election_timeout = random.uniform(8.0, 10.0)
         self._election_timer = threading.Timer(self._election_timeout, self.start_election)
         self._election_timer.start()
-        self.logger.debug("Election timer reset")
+        self.logger.info("Election timer reset")
         
     def start_election(self):
         """Inicia una elección para líder"""
@@ -166,7 +165,7 @@ class ManagerService():
                 votes_received += 1
         
         # Verificar si ganó la elección
-        if votes_received > self._k:
+        if votes_received > self._k and self._status == NodeState.CANDIDATE:
             self.become_leader()
         else:
             self._status = NodeState.FOLLOWER
@@ -188,7 +187,7 @@ class ManagerService():
             )
             return response.json().get("vote_granted", False)
         except Exception as e:
-            self.logger.debug(f"Failed to request vote from {peer_ip}: {e}")
+            self.logger.info(f"Failed to request vote from {peer_ip}: {e}")
             return False
     
     def become_leader(self):
@@ -260,14 +259,14 @@ class ManagerService():
                     if result.get("success"):
                         self._next_index[peer_ip] = next_index + len(entries)
                         self._match_index[peer_ip] = self._next_index[peer_ip] - 1
-                        self.logger.debug(
+                        self.logger.info(
                             f"AppendEntries successful for {peer_ip},"
                             f"next_index: {self._next_index[peer_ip]}"
                         )
                         self._maybe_advance_commit_index()
                     else:
                         self._next_index[peer_ip] = max(0, next_index - 1)
-                        self.logger.debug(
+                        self.logger.info(
                             f"AppendEntries failed for {peer_ip}, decrementing next_index to " +
                             f"{self._next_index[peer_ip]}"
                         )
@@ -288,7 +287,7 @@ class ManagerService():
         
         # Verificar term
         if term < self._current_term:
-            self.logger.debug(
+            self.logger.info(
                 f"Rejecting vote request from {candidate_id}: term {term}" +
                 f" < current term {self._current_term}"
             )
@@ -312,7 +311,7 @@ class ManagerService():
             self.logger.info(f"Voted for {candidate_id} in term {term}")
             return {"term": self._current_term, "vote_granted": True}
         else:
-            self.logger.debug(f"Rejecting vote request from {candidate_id}: voting conditions not met")
+            self.logger.info(f"Rejecting vote request from {candidate_id}: voting conditions not met")
             return {"term": self._current_term, "vote_granted": False}
 
     def is_candidate_log_up_to_date(self, last_log_index: int, last_log_term: int) -> bool:
@@ -341,7 +340,7 @@ class ManagerService():
         
         # Verificar term
         if term < self._current_term:
-            self.logger.debug(
+            self.logger.info(
                 f"Rejecting AppendEntries from {leader_id}: term {term}" +
                 f" < current term {self._current_term}"
             )
@@ -358,7 +357,7 @@ class ManagerService():
         # Verificar consistencia del log
         if prev_log_index >= 0:
             if prev_log_index >= len(self._log) or self._log[prev_log_index]["term"] != prev_log_term:
-                self.logger.debug(f"Log inconsistency at index {prev_log_index}")
+                self.logger.info(f"Log inconsistency at index {prev_log_index}")
                 return {"term": self._current_term, "success": False}
         
         # Añadir entradas al log con persistencia
@@ -458,12 +457,12 @@ class ManagerService():
 
             success = response.json().get("success", False)
             if success:
-                self.logger.debug(f"Successfully replicated to {peer_ip}")
+                self.logger.info(f"Successfully replicated to {peer_ip}")
             else:
-                self.logger.debug(f"Failed to replicate to {peer_ip}")
+                self.logger.info(f"Failed to replicate to {peer_ip}")
             return success
         except Exception as e:
-            self.logger.debug(f"Error replicating to {peer_ip}: {e}")
+            self.logger.info(f"Error replicating to {peer_ip}: {e}")
             return False
         
     def apply_committed_entries(self):
@@ -491,7 +490,7 @@ class ManagerService():
                 for e in applied_data
             )
             if already:
-                self.logger.debug(f"Entry index={entry['index']} term={entry['term']} already applied; skipping.")
+                self.logger.info(f"Entry index={entry['index']} term={entry['term']} already applied; skipping.")
                 return
             
             self._log_service.update_applied(entry["index"], True)
@@ -499,7 +498,7 @@ class ManagerService():
             if not self.I_am_leader():
                 self._dispatcher.call(entry["op"], entry["args"])
                 
-            self.logger.debug(f"Applied data saved")
+            self.logger.info(f"Applied data saved")
                 
         except Exception as e:
             self.logger.error(f"Error applying entry to state machine: {e}")
@@ -537,7 +536,7 @@ class ManagerService():
             while True:
                 try:
                     self._discover_managers()
-                    self.logger.debug(f"Managers list refreshed: {self._managers_ips}")
+                    self.logger.info(f"Managers list refreshed: {self._managers_ips}")
                 except Exception as e:
                     self.logger.error(f"Error discovering managers: {e}")
                 time.sleep(interval)
@@ -724,8 +723,7 @@ class ManagerService():
                 new_leader = res.json()["message"]
                 
                 if current_leader and current_leader != new_leader:
-                    api_port = 8000
-                    requests.post(f"http://{get_local_ip()}:{api_port}/reset")
+                    self.reset()
                     self._leader_ip = new_leader
                     self._save_persistent_state()
                 return self._leader_ip
