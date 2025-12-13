@@ -51,11 +51,11 @@ class ManagerService():
             cls._instance._status = NodeState.FOLLOWER
             cls._instance._log_service = LogService(LogRepository())
             cls._instance._state_service = StateService(StateRepository())
+            cls._instance._load_persistent_state()
             cls._instance._find_network_leader()
             cls._instance._notify_existence()
             # ========== Codigo de Raft =========
             cls._instance._setup_logging()
-            cls._instance._load_persistent_state()
             
             # Leader state
             cls._instance._next_index = {}
@@ -92,6 +92,7 @@ class ManagerService():
             state_data: dict = current_state["message"]
             self._current_term = state_data.get("current_term", 0)
             self._voted_for = state_data.get("voted_for", None)
+            self._leader_ip = state_data.get("current_leader", None)
             self._commit_index = state_data.get("commit_index", -1)
             self._last_applied = state_data.get("last_applied", -1)
             self.logger.info(f"Loaded state: term={self._current_term}, voted_for={self._voted_for}, "
@@ -104,6 +105,7 @@ class ManagerService():
         payload = {
             "current_term": self._current_term,
             "voted_for": self._voted_for,
+            "current_leader": self._leader_ip,
             "commit_index": self._commit_index,
             "last_applied": self._last_applied
         }
@@ -194,6 +196,7 @@ class ManagerService():
         self.logger.info(f"Becoming leader for term {self._current_term}")
         self._status = NodeState.LEADER
         self._leader_ip = get_local_ip()
+        self._save_persistent_state()
         self._send_request_to_all_managers("POST", f"/new_leader/{self._leader_ip}")
         
         # Inicializar estado del líder
@@ -592,9 +595,11 @@ class ManagerService():
                 state = status["state"]
                 current_term = status["current_term"]
                 
-                if state == NodeState.LEADER.value and \
-                    self._current_term < current_term:
-                    
+                if state == NodeState.LEADER.value and (
+                    self._current_term < current_term or (
+                    self._current_term == current_term and
+                    get_local_ip() < manager
+                )):
                     possible_leaders = []
                     break
                 elif state == NodeState.LEADER.value:
@@ -639,6 +644,9 @@ class ManagerService():
             
         for peer in managers:
             requests.post(f"http://{peer}:{api_port}/block")
+        
+        for peer in managers:
+            requests.post(f"http://{peer}:{api_port}/new_leader/{get_local_ip()}")
             
         requests.post(f"http://{get_local_ip()}:{api_port}/block")
         # -----------------------------------------------
@@ -706,16 +714,24 @@ class ManagerService():
             
     
     def _find_network_leader(self) -> str:
-        if self._leader_ip:
-            return self._leader_ip
+        # if self._leader_ip:
+        #     return self._leader_ip
         
         try:
             res = self._send_request_to_all_managers("GET", f"/managers/leader")
             if res.json()["status"] == 200:
-                self._leader_ip = res.json()["message"]
+                current_leader = self._leader_ip
+                new_leader = res.json()["message"]
+                
+                if current_leader and current_leader != new_leader:
+                    api_port = 8000
+                    requests.post(f"http://{get_local_ip()}:{api_port}/reset")
+                    self._leader_ip = new_leader
+                    self._save_persistent_state()
                 return self._leader_ip
             else:
                 self._leader_ip = None
+                self._save_persistent_state()
             publish_status(res.json())
         except Exception as e:
             publish_status({'message': f"Error inesperado {str(e)}", 'status': 500})
@@ -791,7 +807,8 @@ class ManagerService():
         try:
             if (not self._leader_ip) or (self._leader_ip != new_leader_addr):
                 self._leader_ip = new_leader_addr
-
+                self._save_persistent_state()
+                
                 if self._leader_ip != get_local_ip():
                     self._status = NodeState.FOLLOWER
                 self.reset_election_timer()
@@ -807,4 +824,3 @@ class ManagerService():
         self._status = NodeState.FOLLOWER
         self._match_index = {}
         self._next_index = {}
-        self._leader_ip = None
