@@ -589,7 +589,7 @@ class ManagerService():
                     url=f"http://{manager}:{api_port}/status", 
                     timeout=2
                 )
-                
+      
                 status = res.json()
                 state = status["state"]
                 current_term = status["current_term"]
@@ -640,6 +640,9 @@ class ManagerService():
         # --------------- unblock ----------------------
         for peer in managers:
             requests.post(f"http://{peer}:{api_port}/reset")
+            
+        self._match_index = {}
+        self._next_index = {}
             
         for peer in managers:
             requests.post(f"http://{peer}:{api_port}/block")
@@ -694,28 +697,9 @@ class ManagerService():
             }
             
             self._save_log_entry(new_entry)
-            self._dispatcher.auth_service.update_status(data["username"], "offline")
-
-            remote_ip = remote_user["ip"]
-            remote_port = remote_user["port"]
-            local_user_ip = local_user["ip"]
-            local_user_port = local_user["port"]
-
-            requests.post(
-                f"http://{remote_ip}:{remote_port}/duplicated-session",
-                timeout=2
-            )
-            
-            requests.post(
-                f"http://{local_user_ip}:{local_user_port}/duplicated-session",
-                timeout=2
-            )
-            
+            self._dispatcher.auth_service.update_status(data["username"], "offline")            
     
     def _find_network_leader(self) -> str:
-        # if self._leader_ip:
-        #     return self._leader_ip
-        
         try:
             res = self._send_request_to_all_managers("GET", f"/managers/leader")
             if res.json()["status"] == 200:
@@ -801,9 +785,14 @@ class ManagerService():
         except Exception as e:
             publish_status({'message': f"Error inesperado {str(e)}", 'status': 500})
         
-    def update_leader(self, new_leader_addr: str):
+    def update_leader(self, new_leader_addr: str, term: int = None):
         try:
-            if (not self._leader_ip) or (self._leader_ip != new_leader_addr):
+            if term and (self._current_term > term or (
+                self._current_term == term and
+                get_local_ip() > new_leader_addr
+            )):
+                return {"message": f"I am the leader", "status": 200}
+            elif (not self._leader_ip) or (self._leader_ip != new_leader_addr):
                 self._leader_ip = new_leader_addr
                 self._save_persistent_state()
                 
@@ -820,5 +809,3 @@ class ManagerService():
         self._dispatcher.auth_service.reset()
         self._load_persistent_state()
         self._status = NodeState.FOLLOWER
-        self._match_index = {}
-        self._next_index = {}
