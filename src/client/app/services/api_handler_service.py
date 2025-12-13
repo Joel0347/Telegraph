@@ -192,7 +192,6 @@ class ApiHandlerService():
     def check_is_active(self, username: str) -> bool:
         try:
             res = self._send_request("GET", f"/users/active/{username}")
-            publish_status(res.json())
             
             if res.json()["status"] == 200:
                 return res.json()["message"] == "online"
