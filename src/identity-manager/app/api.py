@@ -153,8 +153,8 @@ def status():
     
 @app.route('/append_entries', methods=['POST'])
 def append_entries():
-    mng_service.update_leader(request.remote_addr)
-    data = request.json
+    data: dict = request.json
+    mng_service.update_leader(request.remote_addr, data.get("term", None))
     response = mng_service.handle_append_entries(data)
     return jsonify(response)
         
