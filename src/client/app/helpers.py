@@ -1,5 +1,6 @@
 import socket, os, fcntl, struct, ipaddress
 import streamlit as st
+from time import sleep
 
 
 def get_local_ip(s: socket.socket = None, ifname="eth0") -> str:
@@ -41,6 +42,9 @@ def publish_status(response: dict):
         st.warning(response['message'])
     else:
         st.error(response['message'])
+
+    sleep(2)
+    st.rerun()
 
 def render_html_template(file_name: str, **kwargs) -> str:
     path = f"./static/html/{file_name}"

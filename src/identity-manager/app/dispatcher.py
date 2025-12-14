@@ -17,7 +17,6 @@ class Dispatcher:
                 "get_peers": cls._instance.get_peers,
                 "list_users": cls._instance.list_users,
                 "find_by_username": cls._instance.find_by_username,
-                "notify_online": cls._instance.notify_online,
                 "heartbeat": cls._instance.heartbeat,
                 "is_user_active": cls._instance.is_user_active,
                 "update_ip_address": cls._instance.update_ip_address,
@@ -79,11 +78,6 @@ class Dispatcher:
     def find_by_username(self, data: dict) -> Response:
         username = data.get("username", "")
         msg = self.auth_service.get_user_by_username(username)
-        return jsonify(msg)
-    
-    def notify_online(self, data: dict) -> Response:
-        username = data.get("username", "")
-        msg = self.auth_service.update_status(username, "online")
         return jsonify(msg)
 
     def heartbeat(self, data: dict) -> Response:

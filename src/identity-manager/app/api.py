@@ -24,7 +24,7 @@ blocked = False
 def intercept_requests():
     global blocked
     
-    allowed_when_blocked = ["list_users_info", "block_api", "reset", "status"]
+    allowed_when_blocked = ["list_users_info", "block_api", "reset", "status", "new_leader"]
     
     if request.endpoint in allowed_when_blocked:
         return None
@@ -38,7 +38,6 @@ def intercept_requests():
         "register",
         "login",
         "logout",
-        "notify_online",
         "heartbeat",
         "update_ip_address",
     }
@@ -106,11 +105,6 @@ def list_users():
 def find_by_username(username: str):
     data = {"username": username}
     return dispatcher.find_by_username(data)
-
-@app.route("/users/status/<username>", methods=["POST"])
-def notify_online(username: str):
-    data = {"username": username}
-    return dispatcher.notify_online(data)
 
 @app.post("/heartbeat")
 def heartbeat():

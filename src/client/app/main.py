@@ -55,7 +55,6 @@ if username := client_srv.get_username():
         client_srv.remove_username()
         st.rerun()
   
-    api_srv.notify_online(username)
     st.session_state.page = "chat"
 
 if st.session_state.page == "login":

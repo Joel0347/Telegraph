@@ -643,12 +643,12 @@ class ManagerService():
             
         self._match_index = {}
         self._next_index = {}
+
+        for peer in managers:
+            requests.post(f"http://{peer}:{api_port}/new_leader/{get_local_ip()}")
             
         for peer in managers:
             requests.post(f"http://{peer}:{api_port}/block")
-        
-        for peer in managers:
-            requests.post(f"http://{peer}:{api_port}/new_leader/{get_local_ip()}")
             
         requests.post(f"http://{get_local_ip()}:{api_port}/block")
         # -----------------------------------------------

@@ -181,13 +181,6 @@ class ApiHandlerService():
         except Exception as e:
             publish_status({'message': f"Error inesperado {e}", 'status': 500})
             return {}
-        
-    def notify_online(self, username: str):
-        try:
-            res = self._send_request("GET", f"/users/{username}")
-            publish_status(res.json())
-        except Exception as e:
-            publish_status({'message': f"Error inesperado {e}", 'status': 500})
     
     def check_is_active(self, username: str) -> bool:
         try:
