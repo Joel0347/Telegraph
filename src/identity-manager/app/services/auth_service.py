@@ -110,6 +110,7 @@ class AuthService:
             user.password = password
             user.port = port
             user.status = status
+            user.last_seen = datetime.now()
             self.repo.update_user(user)
             return ApiResponse('Usuario actualizado exitosamente', 200)
         except Exception as e:

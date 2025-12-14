@@ -128,6 +128,7 @@ docker network create \
 3. Run Identity Manager Container
 ```bash
 docker run --rm \
+  --ip <ip> \
   --name identity-manager-<i> \
   --network <network_name> \
   --network-alias identity-manager \
@@ -141,6 +142,7 @@ docker run --rm \
 4. Create as many clients as you need
 ```bash
 docker run --rm \
+  -- ip <ip> \
   --name <client_name> \
   --network <network_name> \
   -v $(pwd)/client/app:/app \

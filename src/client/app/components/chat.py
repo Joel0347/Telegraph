@@ -31,6 +31,8 @@ class ChatModule(UIModule):
             """)
             self.api_srv.set_duplicated_session(False)
 
+        st.sidebar.markdown(f"*Bienvenid@* :green-background[**_{username.title()}_**]")
+
         if st.sidebar.button("Cerrar Sesión", type='primary'):
             self.api_srv.logout(username)
             st.session_state.page = "login"
