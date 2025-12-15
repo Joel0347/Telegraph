@@ -1,5 +1,6 @@
 import requests, os, json, socket
 from typing import Optional, Literal
+from time import time
 from helpers import publish_status, get_local_ip, get_local_port, get_overlay_network
 
 
@@ -24,7 +25,6 @@ class ApiHandlerService():
         api_urls = set()
 
         try:
-            # raise Exception()
             infos = socket.getaddrinfo("identity-manager", None)
             for info in infos:
                 ip = info[4][0]
@@ -33,12 +33,18 @@ class ApiHandlerService():
             for ip in net.hosts():
                 try:
                     sock.sendto(json.dumps(msg).encode(), (str(ip), udp_port))
-                    data, _ = sock.recvfrom(1024)
+                except Exception:
+                    continue
+            
+            end = time() + len(list(net.hosts())) * 0.2
+            while time() < end:
+                try:
+                    data, addr = sock.recvfrom(1024)
                     response = json.loads(data.decode())
 
                     if response.get("status") == "active":
-                        api_urls.add(str(ip))
-                except Exception as e:
+                        api_urls.add(addr[0])
+                except Exception:
                     continue
 
         self.api_urls = list(api_urls)

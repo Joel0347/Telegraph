@@ -554,20 +554,26 @@ class ManagerService():
         managers = set()
 
         try:
-            # raise Exception()
             infos = socket.getaddrinfo("identity-manager", None)
             for info in infos:
                 ip = info[4][0]
                 managers.add(ip)
         except Exception:
+            managers.add(get_local_ip())
             for ip in net.hosts():
                 try:
                     sock.sendto(json.dumps(msg).encode(), (str(ip), udp_port))
-                    data, _ = sock.recvfrom(1024)
+                except Exception:
+                    continue
+            
+            end = time.time() + len(list(net.hosts())) * 0.2
+            while time.time() < end:
+                try:
+                    data, addr = sock.recvfrom(1024)
                     response = json.loads(data.decode())
 
                     if response.get("status") == "active":
-                        managers.add(str(ip))
+                        managers.add(addr[0])
                 except Exception:
                     continue
         
@@ -750,20 +756,7 @@ class ManagerService():
                 publish_status({'message': f"Error con {manager}: {str(e)}", 'status': 500})
                 continue
         return res
-    
-    # def _send_request_to_all_clients(self, method: str, path: str, **kwargs):
-    #     users = self._dispatcher.auth_service.list_all()
-    #     for user in users:
-    #         try:
-    #             res = requests.request(
-    #                 method, f"http://{user.ip}:{user.port}{path}",
-    #                 timeout=2, **kwargs
-    #             )
-    #             res.raise_for_status()
-    #         except Exception as e:
-    #             publish_status({'message': f"Error con {user}: {str(e)}", 'status': 500})
-    #             continue
-        
+
     def add_new_manager(self, ip: str):
         try:
             self._managers_ips.add(ip)
